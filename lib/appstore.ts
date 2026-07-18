@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import type { NormalizedReview } from "./supabase";
+import type { AppStoreCreds } from "./credentials";
 
 /**
  * App Store Connect API クライアント。
@@ -10,12 +11,15 @@ import type { NormalizedReview } from "./supabase";
 
 const BASE = "https://api.appstoreconnect.apple.com/v1";
 
-/** .p8秘密鍵から短命JWT(<=20分)を生成 */
-export function makeAscToken(): string {
-  const issuerId = process.env.ASC_ISSUER_ID!;
-  const keyId = process.env.ASC_KEY_ID!;
-  const privateKey = (process.env.ASC_PRIVATE_KEY || "").replace(/\\n/g, "\n");
-  if (!issuerId || !keyId || !privateKey) throw new Error("ASC_* env missing");
+/**
+ * .p8秘密鍵から短命JWT(<=20分)を生成。
+ * credsが渡されればそれを使い、無ければ環境変数にフォールバック（開発/単一テナント）。
+ */
+export function makeAscToken(creds?: AppStoreCreds): string {
+  const issuerId = creds?.issuerId ?? process.env.ASC_ISSUER_ID!;
+  const keyId = creds?.keyId ?? process.env.ASC_KEY_ID!;
+  const privateKey = (creds?.privateKey ?? process.env.ASC_PRIVATE_KEY ?? "").replace(/\\n/g, "\n");
+  if (!issuerId || !keyId || !privateKey) throw new Error("ASC credentials missing");
 
   const now = Math.floor(Date.now() / 1000);
   return jwt.sign(
@@ -50,9 +54,10 @@ async function ascGet(path: string, token: string): Promise<any> {
 export async function fetchAppStoreReviews(
   appId: string,
   stopAtExternalId?: string | null,
-  maxPages = 5
+  maxPages = 5,
+  creds?: AppStoreCreds
 ): Promise<NormalizedReview[]> {
-  const token = makeAscToken();
+  const token = makeAscToken(creds);
   const out: NormalizedReview[] = [];
   let url = `/apps/${appId}/customerReviews?sort=-createdDate&limit=200`;
 

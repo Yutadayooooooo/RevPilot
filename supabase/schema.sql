@@ -19,6 +19,16 @@ alter table profiles add column if not exists plan_status text;       -- Stripe�
 alter table profiles add column if not exists current_period_end timestamptz;
 create index if not exists idx_profiles_stripe_customer on profiles (stripe_customer_id);
 
+-- ストア認証情報（オーナー×ストアで1組。data_encryptedはAES-256-GCMで暗号化済み）
+create table if not exists store_credentials (
+  owner uuid not null references profiles (id) on delete cascade,
+  store text not null check (store in ('appstore','googleplay')),
+  data_encrypted text not null,               -- lib/crypto.ts で暗号化した文字列
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (owner, store)
+);
+
 -- 監視対象アプリ
 create table if not exists apps (
   id uuid primary key default gen_random_uuid(),
@@ -81,12 +91,16 @@ create table if not exists poll_state (
 
 -- RLS（本人のデータのみ）。service_roleはRLSをバイパスするのでcronは影響なし。
 alter table profiles enable row level security;
+alter table store_credentials enable row level security;
 alter table apps enable row level security;
 alter table reviews enable row level security;
 alter table replies enable row level security;
 
 create policy "own profile" on profiles
   for all using (auth.uid() = id) with check (auth.uid() = id);
+
+create policy "own credentials" on store_credentials
+  for all using (auth.uid() = owner) with check (auth.uid() = owner);
 
 create policy "own apps" on apps
   for all using (auth.uid() = owner) with check (auth.uid() = owner);

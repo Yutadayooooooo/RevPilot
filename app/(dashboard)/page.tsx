@@ -1,12 +1,26 @@
+import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RatingStars } from "@/components/rating-stars";
 import { getReviews } from "@/lib/reviews-data";
+import { createSupabaseServer, getCurrentUser } from "@/lib/supabase/server";
+import { connectedStores } from "@/lib/credentials";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function OverviewPage() {
+  // 新規ユーザー（アプリも連携ストアも無い）はオンボーディングへ誘導
+  const user = await getCurrentUser();
+  if (user) {
+    const db = createSupabaseServer();
+    const [{ count: appCount }, stores] = await Promise.all([
+      db.from("apps").select("id", { count: "exact", head: true }),
+      connectedStores(db, user.id),
+    ]);
+    if ((appCount ?? 0) === 0 && stores.length === 0) redirect("/onboarding");
+  }
+
   const { rows, usingSample } = await getReviews();
   const total = rows.length;
   const avg = total ? rows.reduce((s, r) => s + r.rating, 0) / total : 0;

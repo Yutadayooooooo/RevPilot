@@ -4,6 +4,7 @@ import { createSupabaseServer, getCurrentUser } from "@/lib/supabase/server";
 import { draftReply } from "@/lib/ai";
 import { replyToGooglePlayReview } from "@/lib/googleplay";
 import { limitsForPlan, monthStartISO } from "@/lib/plan";
+import { loadCredentials, type GooglePlayCreds } from "@/lib/credentials";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +87,8 @@ export async function POST(req: NextRequest) {
         app.reply_tone
       );
     }
-    await replyToGooglePlayReview(app.store_app_id, review.external_id, body);
+    const gpCreds = (await loadCredentials<GooglePlayCreds>(db, user.id, "googleplay")) ?? undefined;
+    await replyToGooglePlayReview(app.store_app_id, review.external_id, body, gpCreds);
     await db.from("replies").insert({
       review_id: reviewId,
       body,

@@ -3,6 +3,7 @@ import { fetchAppStoreReviews } from "./appstore";
 import { fetchGooglePlayReviews } from "./googleplay";
 import { notifyLowRating } from "./notify";
 import { limitsForPlan } from "./plan";
+import { loadCredentials, type AppStoreCreds, type GooglePlayCreds } from "./credentials";
 
 const APP_SELECT = "id, owner, store, store_app_id, name, profiles(line_user_id, plan)";
 
@@ -35,6 +36,13 @@ async function pollApps(
   apps: any[]
 ): Promise<{ inserted: number; apps: number }> {
   let inserted = 0;
+  const credCache = new Map<string, AppStoreCreds | GooglePlayCreds | null>();
+  const credsFor = async (owner: string, store: "appstore" | "googleplay") => {
+    const cacheKey = `${owner}:${store}`;
+    if (!credCache.has(cacheKey)) credCache.set(cacheKey, await loadCredentials(db, owner, store));
+    return credCache.get(cacheKey) ?? undefined;
+  };
+
   for (const app of apps) {
     const { data: state } = await db
       .from("poll_state")
@@ -46,8 +54,17 @@ async function pollApps(
     try {
       reviews =
         app.store === "appstore"
-          ? await fetchAppStoreReviews(app.store_app_id, state?.last_seen_external_id)
-          : await fetchGooglePlayReviews(app.store_app_id);
+          ? await fetchAppStoreReviews(
+              app.store_app_id,
+              state?.last_seen_external_id,
+              5,
+              (await credsFor(app.owner, "appstore")) as AppStoreCreds | undefined
+            )
+          : await fetchGooglePlayReviews(
+              app.store_app_id,
+              100,
+              (await credsFor(app.owner, "googleplay")) as GooglePlayCreds | undefined
+            );
     } catch (e) {
       console.error(`poll failed app=${app.id}`, e);
       continue; // 1アプリの失敗で全体を止めない

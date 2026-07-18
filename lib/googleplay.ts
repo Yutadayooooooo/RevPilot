@@ -1,5 +1,6 @@
 import { GoogleAuth } from "google-auth-library";
 import type { NormalizedReview } from "./supabase";
+import type { GooglePlayCreds } from "./credentials";
 
 /**
  * Google Play Developer API クライアント。
@@ -12,15 +13,15 @@ import type { NormalizedReview } from "./supabase";
 
 const SCOPE = "https://www.googleapis.com/auth/androidpublisher";
 
-function auth() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON missing");
+function auth(creds?: GooglePlayCreds) {
+  const raw = creds?.serviceAccountJson ?? process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) throw new Error("Google Play credentials missing");
   const credentials = JSON.parse(raw);
   return new GoogleAuth({ credentials, scopes: [SCOPE] });
 }
 
-async function token(): Promise<string> {
-  const client = await auth().getClient();
+async function token(creds?: GooglePlayCreds): Promise<string> {
+  const client = await auth(creds).getClient();
   const t = await client.getAccessToken();
   if (!t.token) throw new Error("failed to get google access token");
   return t.token;
@@ -29,9 +30,10 @@ async function token(): Promise<string> {
 /** @param packageName 例: com.example.app */
 export async function fetchGooglePlayReviews(
   packageName: string,
-  maxResults = 100
+  maxResults = 100,
+  creds?: GooglePlayCreds
 ): Promise<NormalizedReview[]> {
-  const accessToken = await token();
+  const accessToken = await token(creds);
   const url =
     `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/` +
     `${encodeURIComponent(packageName)}/reviews?maxResults=${maxResults}`;
@@ -64,9 +66,10 @@ export async function fetchGooglePlayReviews(
 export async function replyToGooglePlayReview(
   packageName: string,
   reviewId: string,
-  replyText: string
+  replyText: string,
+  creds?: GooglePlayCreds
 ): Promise<void> {
-  const accessToken = await token();
+  const accessToken = await token(creds);
   const url =
     `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/` +
     `${encodeURIComponent(packageName)}/reviews/${encodeURIComponent(reviewId)}:reply`;
