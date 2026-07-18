@@ -4,6 +4,7 @@ import { fetchGooglePlayReviews } from "./googleplay";
 import { notifyLowRating } from "./notify";
 import { limitsForPlan } from "./plan";
 import { loadCredentials, type AppStoreCreds, type GooglePlayCreds } from "./credentials";
+import { classifyTopics } from "./ai";
 
 const APP_SELECT = "id, owner, store, store_app_id, name, profiles(line_user_id, plan)";
 
@@ -93,6 +94,10 @@ async function pollApps(
         });
       }
     }
+
+    // 新規レビューをAIでトピック分類 → review_topics に保存（分析画面の要望ランキング用）
+    await classifyNewReviews(db, upserted ?? []);
+
     inserted += upserted?.length ?? 0;
 
     // チェックポイント更新（最新レビューID）
@@ -104,4 +109,30 @@ async function pollApps(
   }
 
   return { inserted, apps: apps.length };
+}
+
+/**
+ * 新規レビューをAIでトピック分類し review_topics に保存する。
+ * ANTHROPIC_API_KEY未設定なら何もしない。1件の失敗で全体は止めない。
+ */
+async function classifyNewReviews(
+  db: ReturnType<typeof serviceClient>,
+  rows: { id: string; rating: number; body: string | null }[]
+): Promise<void> {
+  if (!process.env.ANTHROPIC_API_KEY) return;
+  for (const r of rows) {
+    if (!r.body) continue; // 本文が無ければ分類しない
+    try {
+      const topics = await classifyTopics({ rating: r.rating, body: r.body });
+      if (topics.length === 0) continue;
+      await db
+        .from("review_topics")
+        .upsert(
+          topics.map((topic) => ({ review_id: r.id, topic })),
+          { onConflict: "review_id,topic", ignoreDuplicates: true }
+        );
+    } catch (e) {
+      console.error(`classify failed review=${r.id}`, e);
+    }
+  }
 }

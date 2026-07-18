@@ -16,7 +16,7 @@ export async function getReviews(opts: { store?: string; maxRating?: number } = 
     const db = createSupabaseServer();
     let q = db
       .from("reviews")
-      .select("id, store, rating, title, body, author, reviewed_at, apps!inner(name, owner)")
+      .select("id, store, rating, title, body, author, reviewed_at, review_topics(topic), apps!inner(name, owner)")
       .order("reviewed_at", { ascending: false })
       .limit(100);
     if (opts.store) q = q.eq("store", opts.store);
@@ -26,6 +26,7 @@ export async function getReviews(opts: { store?: string; maxRating?: number } = 
     const rows: ReviewRow[] = (data ?? []).map((r: any) => ({
       id: r.id, store: r.store, rating: r.rating, title: r.title, body: r.body,
       author: r.author, app_name: r.apps?.name ?? "-", reviewed_at: r.reviewed_at,
+      topics: (r.review_topics ?? []).map((t: any) => t.topic),
     }));
     return { rows, usingSample: false };
   } catch {
