@@ -12,6 +12,13 @@ create table if not exists profiles (
   created_at timestamptz not null default now()
 );
 
+-- Stripe課金（既存DBへの再実行でも安全に追加）
+alter table profiles add column if not exists stripe_customer_id text;
+alter table profiles add column if not exists stripe_subscription_id text;
+alter table profiles add column if not exists plan_status text;       -- Stripeのsubscription.status
+alter table profiles add column if not exists current_period_end timestamptz;
+create index if not exists idx_profiles_stripe_customer on profiles (stripe_customer_id);
+
 -- 監視対象アプリ
 create table if not exists apps (
   id uuid primary key default gen_random_uuid(),

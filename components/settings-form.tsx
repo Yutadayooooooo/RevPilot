@@ -17,9 +17,11 @@ const TONES = [
 export function SettingsForm({
   initialApps,
   initialPrefs,
+  billingEnabled,
 }: {
   initialApps: AppRow[];
   initialPrefs: NotifyPrefs;
+  billingEnabled: boolean;
 }) {
   const [apps, setApps] = useState<AppRow[]>(initialApps);
   const [prefs, setPrefs] = useState<NotifyPrefs>(initialPrefs);
@@ -28,7 +30,7 @@ export function SettingsForm({
     <div className="space-y-6">
       <ConnectedApps apps={apps} setApps={setApps} />
       <Notifications prefs={prefs} setPrefs={setPrefs} />
-      <PlanCard plan={prefs.plan} />
+      <PlanCard plan={prefs.plan} billingEnabled={billingEnabled} />
     </div>
   );
 }
@@ -214,46 +216,103 @@ function Notifications({ prefs, setPrefs }: { prefs: NotifyPrefs; setPrefs: (p: 
 }
 
 /* ---------------- 課金プラン ---------------- */
-function PlanCard({ plan }: { plan: string }) {
-  const plans = [
-    { key: "free", name: "Free", price: "¥0", features: ["1アプリ", "手動更新", "AI返信 月10件"] },
-    { key: "pro", name: "Pro", price: "¥1,480/月", features: ["全アプリ", "自動取得", "AI返信 無制限", "週次サマリー"] },
-    { key: "team", name: "Team", price: "¥2,980/月", features: ["複数メンバー", "Slack連携", "競合監視"] },
-  ];
+const PLANS = [
+  { key: "free", name: "Free", price: "¥0", features: ["1アプリ", "手動更新", "AI返信 月10件"] },
+  { key: "pro", name: "Pro", price: "¥1,480/月", features: ["全アプリ", "自動取得", "AI返信 無制限", "週次サマリー"] },
+  { key: "team", name: "Team", price: "¥2,980/月", features: ["複数メンバー", "Slack連携", "競合監視"] },
+];
+
+function PlanCard({ plan, billingEnabled }: { plan: string; billingEnabled: boolean }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function goToCheckout(planKey: string) {
+    setBusy(planKey);
+    setErr(null);
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan: planKey }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.url) throw new Error(json.error ?? "決済ページを開けませんでした");
+      window.location.href = json.url;
+    } catch (e: any) {
+      setErr(e.message);
+      setBusy(null);
+    }
+  }
+
+  async function openPortal() {
+    setBusy("portal");
+    setErr(null);
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || !json.url) throw new Error(json.error ?? "管理ページを開けませんでした");
+      window.location.href = json.url;
+    } catch (e: any) {
+      setErr(e.message);
+      setBusy(null);
+    }
+  }
+
+  const isPaid = plan === "pro" || plan === "team";
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>課金プラン</CardTitle>
+        {isPaid && billingEnabled && (
+          <Button size="sm" variant="outline" onClick={openPortal} disabled={busy === "portal"}>
+            {busy === "portal" ? <Loader2 className="h-4 w-4 animate-spin" /> : null} プランを管理
+          </Button>
+        )}
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-3">
-        {plans.map((p) => {
-          const current = p.key === plan;
-          return (
-            <div
-              key={p.key}
-              className={`rounded-lg border p-4 ${current ? "border-primary ring-1 ring-primary" : ""}`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-medium">{p.name}</span>
-                {current && <Badge>現在</Badge>}
+      <CardContent className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {PLANS.map((p) => {
+            const current = p.key === plan;
+            return (
+              <div
+                key={p.key}
+                className={`rounded-lg border p-4 ${current ? "border-primary ring-1 ring-primary" : ""}`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{p.name}</span>
+                  {current && <Badge>現在</Badge>}
+                </div>
+                <div className="my-2 text-lg font-semibold">{p.price}</div>
+                <ul className="space-y-1 text-xs text-muted-foreground">
+                  {p.features.map((f) => (
+                    <li key={f} className="flex items-center gap-1">
+                      <Check className="h-3 w-3 text-primary" /> {f}
+                    </li>
+                  ))}
+                </ul>
+                {!current && p.key !== "free" && (
+                  <Button
+                    size="sm"
+                    className="mt-3 w-full"
+                    variant="outline"
+                    onClick={() => goToCheckout(p.key)}
+                    disabled={!billingEnabled || busy === p.key}
+                  >
+                    {busy === p.key ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {isPaid ? "変更" : "アップグレード"}
+                  </Button>
+                )}
               </div>
-              <div className="my-2 text-lg font-semibold">{p.price}</div>
-              <ul className="space-y-1 text-xs text-muted-foreground">
-                {p.features.map((f) => (
-                  <li key={f} className="flex items-center gap-1">
-                    <Check className="h-3 w-3 text-primary" /> {f}
-                  </li>
-                ))}
-              </ul>
-              {!current && (
-                <Button size="sm" className="mt-3 w-full" variant="outline" disabled>
-                  {/* Stripe Checkout を後で接続 */}
-                  変更
-                </Button>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        {err && <p className="text-sm text-red-600">{err}</p>}
+        {!billingEnabled && (
+          <p className="text-xs text-muted-foreground">
+            課金は未設定です。<code>STRIPE_SECRET_KEY</code> と各プランの price ID を設定すると有効になります。
+          </p>
+        )}
       </CardContent>
     </Card>
   );
