@@ -1,0 +1,22 @@
+flowchart TD
+    A[ランディング] --> B[サインアップ / ログイン]
+    B --> C[オンボーディング: ストアAPIキー登録]
+    C -->|Apple .p8 / Google SA JSON| D[アプリ連携完了]
+    D --> E[ダッシュボード]
+
+    E --> F[統合インボックス]
+    E --> G[分析: 星推移 / 要望ランキング]
+    E --> H[設定: 通知先 / 返信トーン / 課金]
+
+    F --> I[レビュー詳細]
+    I --> J{AI返信ドラフト生成}
+    J -->|Android| K[ワンクリック自動返信 reviews.reply]
+    J -->|iOS| L[文面コピー → App Store Connectに貼付]
+
+    subgraph 裏側で毎時
+      P[Vercel Cron /api/cron/poll] --> Q[両ストアからレビュー取得]
+      Q --> R[DBにupsert 履歴化]
+      R --> S{★1〜2?}
+      S -->|Yes| T[LINE / メール通知]
+    end
+    T -.-> F
