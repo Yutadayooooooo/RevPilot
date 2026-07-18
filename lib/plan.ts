@@ -11,12 +11,14 @@ export interface PlanLimits {
   aiRepliesPerMonth: number | null;
   /** cronによる自動取得を許可するか（Freeは手動更新のみ） */
   autoPolling: boolean;
+  /** 週次サマリーメールを配信するか（Pro以上） */
+  weeklySummary: boolean;
 }
 
 export const PLAN_LIMITS: Record<PlanKey, PlanLimits> = {
-  free: { maxApps: 1, aiRepliesPerMonth: 10, autoPolling: false },
-  pro: { maxApps: null, aiRepliesPerMonth: null, autoPolling: true },
-  team: { maxApps: null, aiRepliesPerMonth: null, autoPolling: true },
+  free: { maxApps: 1, aiRepliesPerMonth: 10, autoPolling: false, weeklySummary: false },
+  pro: { maxApps: null, aiRepliesPerMonth: null, autoPolling: true, weeklySummary: true },
+  team: { maxApps: null, aiRepliesPerMonth: null, autoPolling: true, weeklySummary: true },
 };
 
 /** plan文字列（不正値含む）から制限を取得。未知の値はFree扱い。 */

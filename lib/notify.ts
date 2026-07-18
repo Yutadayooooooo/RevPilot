@@ -25,17 +25,28 @@ async function sendLine(text: string, toUserId?: string | null): Promise<void> {
 }
 
 async function sendEmail(text: string): Promise<void> {
-  const key = process.env.RESEND_API_KEY;
   const to = process.env.NOTIFY_EMAIL_TO;
-  if (!key || !to) return;
-  await fetch("https://api.resend.com/emails", {
+  if (!to) return;
+  await sendEmailTo(to, "⚠️ 低評価レビュー通知", text);
+}
+
+/**
+ * 任意の宛先にメール送信（週次サマリー等で使用）。RESEND_API_KEY未設定なら黙ってスキップ。
+ * htmlを渡せばHTMLメール、無ければtextのみ。
+ */
+export async function sendEmailTo(
+  to: string,
+  subject: string,
+  text: string,
+  html?: string
+): Promise<boolean> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || !to) return false;
+  const from = process.env.RESEND_FROM || "RevPilot <alerts@revpilot.app>";
+  const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: "RevPilot <alerts@revpilot.app>",
-      to,
-      subject: "⚠️ 低評価レビュー通知",
-      text,
-    }),
+    body: JSON.stringify(html ? { from, to, subject, text, html } : { from, to, subject, text }),
   });
+  return res.ok;
 }
