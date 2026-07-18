@@ -1,4 +1,5 @@
 import { createSupabaseServer, getCurrentUser } from "./supabase/server";
+import { connectedStores } from "./credentials";
 
 export interface AppRow {
   id: string;
@@ -21,16 +22,29 @@ const SAMPLE_APPS: AppRow[] = [
 ];
 
 /** 設定画面の初期表示。未ログインならサンプル。 */
-export async function getSettings(): Promise<{ apps: AppRow[]; prefs: NotifyPrefs; usingSample: boolean }> {
+export async function getSettings(): Promise<{
+  apps: AppRow[];
+  prefs: NotifyPrefs;
+  connected: string[];
+  usingSample: boolean;
+}> {
   const user = await getCurrentUser();
   const fallback: NotifyPrefs = { line_user_id: null, email: null, plan: "free" };
-  if (!user) return { apps: SAMPLE_APPS, prefs: { ...fallback, email: "businessyuta313@gmail.com" }, usingSample: true };
+  if (!user) {
+    return {
+      apps: SAMPLE_APPS,
+      prefs: { ...fallback, email: "businessyuta313@gmail.com" },
+      connected: ["appstore"], // サンプル表示用
+      usingSample: true,
+    };
+  }
 
   try {
     const db = createSupabaseServer();
-    const [{ data: apps }, { data: profile }] = await Promise.all([
+    const [{ data: apps }, { data: profile }, connected] = await Promise.all([
       db.from("apps").select("id, store, store_app_id, name, description, reply_tone").order("created_at"),
       db.from("profiles").select("line_user_id, email, plan").eq("id", user.id).maybeSingle(),
+      connectedStores(db, user.id),
     ]);
     return {
       apps: (apps as AppRow[]) ?? [],
@@ -39,9 +53,10 @@ export async function getSettings(): Promise<{ apps: AppRow[]; prefs: NotifyPref
         email: profile?.email ?? user.email ?? null,
         plan: profile?.plan ?? "free",
       },
+      connected,
       usingSample: false,
     };
   } catch {
-    return { apps: SAMPLE_APPS, prefs: fallback, usingSample: true };
+    return { apps: SAMPLE_APPS, prefs: fallback, connected: [], usingSample: true };
   }
 }

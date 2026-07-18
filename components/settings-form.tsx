@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Apple, Play, Trash2, Plus, Check, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { Apple, Play, Trash2, Plus, Check, Loader2, Plug, ArrowRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
@@ -17,10 +18,12 @@ const TONES = [
 export function SettingsForm({
   initialApps,
   initialPrefs,
+  connected,
   billingEnabled,
 }: {
   initialApps: AppRow[];
   initialPrefs: NotifyPrefs;
+  connected: string[];
   billingEnabled: boolean;
 }) {
   const [apps, setApps] = useState<AppRow[]>(initialApps);
@@ -28,10 +31,58 @@ export function SettingsForm({
 
   return (
     <div className="space-y-6">
+      <StoreConnections connected={connected} />
       <ConnectedApps apps={apps} setApps={setApps} />
       <Notifications prefs={prefs} setPrefs={setPrefs} />
       <PlanCard plan={prefs.plan} billingEnabled={billingEnabled} />
     </div>
+  );
+}
+
+/* ---------------- 連携ストアの状態 ---------------- */
+const STORES = [
+  { key: "appstore", label: "App Store (iOS)", Icon: Apple },
+  { key: "googleplay", label: "Google Play (Android)", Icon: Play },
+] as const;
+
+function StoreConnections({ connected }: { connected: string[] }) {
+  const allConnected = STORES.every((s) => connected.includes(s.key));
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>連携ストア</CardTitle>
+        <Link href="/onboarding">
+          <Button size="sm" variant="outline">
+            <Plug className="h-3.5 w-3.5" />
+            {allConnected ? "連携を管理" : "ストアを連携"}
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {STORES.map(({ key, label, Icon }) => {
+          const on = connected.includes(key);
+          return (
+            <div key={key} className="flex items-center justify-between rounded-md border p-3">
+              <div className="flex items-center gap-3">
+                <Icon className="h-4 w-4" />
+                <span className="text-sm">{label}</span>
+              </div>
+              {on ? (
+                <Badge tone="success">
+                  <Check className="h-3 w-3" /> 連携済み
+                </Badge>
+              ) : (
+                <Badge tone="muted">未連携</Badge>
+              )}
+            </div>
+          );
+        })}
+        <p className="text-xs text-muted-foreground">
+          API認証情報を登録したストアが「連携済み」になります。認証情報は暗号化して保存されます。
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 

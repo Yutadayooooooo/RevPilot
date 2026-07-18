@@ -10,7 +10,7 @@ export default async function SettingsPage({
 }: {
   searchParams: { billing?: string };
 }) {
-  const { apps, prefs, usingSample } = await getSettings();
+  const { apps, prefs, connected, usingSample } = await getSettings();
   const billing = searchParams.billing;
 
   return (
@@ -31,7 +31,12 @@ export default async function SettingsPage({
         </div>
       )}
 
-      <SettingsForm initialApps={apps} initialPrefs={prefs} billingEnabled={billingConfigured()} />
+      <SettingsForm
+        initialApps={apps}
+        initialPrefs={prefs}
+        connected={connected}
+        billingEnabled={billingConfigured()}
+      />
     </div>
   );
 }
