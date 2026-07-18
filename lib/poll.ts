@@ -2,20 +2,40 @@ import { serviceClient, type NormalizedReview } from "./supabase";
 import { fetchAppStoreReviews } from "./appstore";
 import { fetchGooglePlayReviews } from "./googleplay";
 import { notifyLowRating } from "./notify";
+import { limitsForPlan } from "./plan";
+
+const APP_SELECT = "id, owner, store, store_app_id, name, profiles(line_user_id, plan)";
 
 /**
- * 全登録アプリを巡回してレビューを取得・upsertし、新規の低評価を通知する。
- * cron(毎時)から呼ぶ。service_roleでRLSをバイパス。
+ * cron(毎時)から呼ぶ自動取得。自動取得が許可されたプラン(Pro以上)のアプリのみ巡回する。
+ * Freeは対象外（手動更新のみ）。service_roleでRLSをバイパス。
  */
 export async function pollAllApps(): Promise<{ inserted: number; apps: number }> {
   const db = serviceClient();
-  const { data: apps, error } = await db
-    .from("apps")
-    .select("id, owner, store, store_app_id, name, profiles(line_user_id)");
+  const { data: apps, error } = await db.from("apps").select(APP_SELECT);
   if (error) throw error;
+  const eligible = (apps ?? []).filter((a) => limitsForPlan((a as any).profiles?.plan).autoPolling);
+  return pollApps(db, eligible);
+}
 
+/**
+ * 特定オーナーのアプリだけを取得する（ユーザーによる手動更新）。
+ * プランに関わらず本人が明示的に叩くので許可する。
+ */
+export async function pollOwnerApps(ownerId: string): Promise<{ inserted: number; apps: number }> {
+  const db = serviceClient();
+  const { data: apps, error } = await db.from("apps").select(APP_SELECT).eq("owner", ownerId);
+  if (error) throw error;
+  return pollApps(db, apps ?? []);
+}
+
+/** 渡されたアプリ群を巡回してレビューをupsertし、新規の低評価を通知する共通処理。 */
+async function pollApps(
+  db: ReturnType<typeof serviceClient>,
+  apps: any[]
+): Promise<{ inserted: number; apps: number }> {
   let inserted = 0;
-  for (const app of apps ?? []) {
+  for (const app of apps) {
     const { data: state } = await db
       .from("poll_state")
       .select("last_seen_external_id")
@@ -66,5 +86,5 @@ export async function pollAllApps(): Promise<{ inserted: number; apps: number }>
     });
   }
 
-  return { inserted, apps: apps?.length ?? 0 };
+  return { inserted, apps: apps.length };
 }

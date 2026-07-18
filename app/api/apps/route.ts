@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServer, getCurrentUser } from "@/lib/supabase/server";
+import { limitsForPlan } from "@/lib/plan";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,20 @@ export async function POST(req: NextRequest) {
   }
 
   const db = createSupabaseServer();
+
+  // プラン別のアプリ数上限をチェック（RLSで自分のアプリのみカウント）
+  const { data: profile } = await db.from("profiles").select("plan").eq("id", user.id).maybeSingle();
+  const limits = limitsForPlan(profile?.plan);
+  if (limits.maxApps !== null) {
+    const { count } = await db.from("apps").select("id", { count: "exact", head: true });
+    if ((count ?? 0) >= limits.maxApps) {
+      return NextResponse.json(
+        { error: `現在のプランでは${limits.maxApps}アプリまでです。Proにアップグレードすると全アプリを連携できます。` },
+        { status: 403 }
+      );
+    }
+  }
+
   const { data, error } = await db
     .from("apps")
     .insert({

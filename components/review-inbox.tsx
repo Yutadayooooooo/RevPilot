@@ -117,6 +117,11 @@ function ReplyDrawer({ review, onClose }: { review: ReviewRow; onClose: () => vo
         body: JSON.stringify({ reviewId: review.id, action: "draft" }),
       });
       const json = await res.json();
+      // プラン上限などの明示エラーは理由を表示（サンプルフォールバックしない）
+      if (res.status === 403) {
+        setStatus(json.error ?? "AI返信の上限に達しました");
+        return;
+      }
       // 実DB接続時は json.reply.body。サンプルIDでは404になるためフォールバック文を出す。
       setDraft(json?.reply?.body ?? sampleDraft(review));
     } catch {

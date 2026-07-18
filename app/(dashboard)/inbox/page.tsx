@@ -1,6 +1,7 @@
 import { getReviews } from "@/lib/reviews-data";
 import { Badge } from "@/components/ui/badge";
 import { ReviewInbox } from "@/components/review-inbox";
+import { RefreshButton } from "@/components/refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export default async function InboxPage() {
     <div className="mx-auto max-w-4xl space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">統合インボックス</h1>
-        {usingSample && <Badge tone="muted">サンプルデータ表示中</Badge>}
+        {usingSample ? <Badge tone="muted">サンプルデータ表示中</Badge> : <RefreshButton />}
       </div>
       <p className="text-sm text-muted-foreground">全アプリ・両ストアのレビュー。★でフィルタし、AI返信を生成できます。</p>
       <ReviewInbox reviews={rows} />

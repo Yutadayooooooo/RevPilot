@@ -1,9 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServer, getCurrentUser } from "@/lib/supabase/server";
 import { draftReply } from "@/lib/ai";
 import { replyToGooglePlayReview } from "@/lib/googleplay";
+import { limitsForPlan, monthStartISO } from "@/lib/plan";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * 今月のAI返信生成数がプラン上限に達していれば理由文を返す（未達ならnull）。
+ * repliesはRLSで自分のレビュー分のみカウントされる。
+ */
+async function aiQuotaError(db: SupabaseClient, userId: string): Promise<string | null> {
+  const { data: profile } = await db.from("profiles").select("plan").eq("id", userId).maybeSingle();
+  const limit = limitsForPlan(profile?.plan).aiRepliesPerMonth;
+  if (limit === null) return null;
+  const { count } = await db
+    .from("replies")
+    .select("id", { count: "exact", head: true })
+    .eq("source", "ai")
+    .gte("created_at", monthStartISO());
+  if ((count ?? 0) >= limit) {
+    return `今月のAI返信の上限（${limit}件）に達しました。Proにアップグレードすると無制限に生成できます。`;
+  }
+  return null;
+}
 
 /**
  * POST /api/reply
@@ -30,6 +51,8 @@ export async function POST(req: NextRequest) {
   const app = (review as any).apps;
 
   if (action === "draft") {
+    const quotaErr = await aiQuotaError(db, user.id);
+    if (quotaErr) return NextResponse.json({ error: quotaErr }, { status: 403 });
     const body = await draftReply(
       { rating: review.rating, title: review.title, body: review.body, territory: review.territory },
       app.name,
@@ -51,14 +74,18 @@ export async function POST(req: NextRequest) {
         { status: 422 }
       );
     }
-    const body =
-      text ??
-      (await draftReply(
+    let body = text;
+    if (!body) {
+      // 本文が渡されていない＝ここでAI生成するので上限をチェック
+      const quotaErr = await aiQuotaError(db, user.id);
+      if (quotaErr) return NextResponse.json({ error: quotaErr }, { status: 403 });
+      body = await draftReply(
         { rating: review.rating, title: review.title, body: review.body },
         app.name,
         app.description,
         app.reply_tone
-      ));
+      );
+    }
     await replyToGooglePlayReview(app.store_app_id, review.external_id, body);
     await db.from("replies").insert({
       review_id: reviewId,
