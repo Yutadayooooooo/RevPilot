@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data.dart';
@@ -28,7 +30,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _signOut() async {
-    await Supabase.instance.client.auth.signOut();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('ログアウト'),
+        content: const Text('ログアウトしますか？'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('キャンセル')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('ログアウト'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      HapticFeedback.mediumImpact();
+      await Supabase.instance.client.auth.signOut();
+    }
   }
 
   @override
@@ -127,7 +149,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ],
-          );
+          )
+              .animate()
+              .fadeIn(duration: 300.ms)
+              .slideY(begin: 0.03, end: 0, curve: Curves.easeOut);
         },
       ),
     );

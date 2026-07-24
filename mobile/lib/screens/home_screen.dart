@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'reviews_screen.dart';
 import 'analytics_screen.dart';
@@ -27,7 +28,10 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(index: _index, children: _screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) {
+          if (i != _index) HapticFeedback.selectionClick();
+          setState(() => _index = i);
+        },
         destinations: const [
           NavigationDestination(
               icon: Icon(Icons.rate_review_outlined),

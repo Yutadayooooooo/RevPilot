@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../theme.dart';
@@ -28,6 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    HapticFeedback.lightImpact();
     setState(() {
       _loading = true;
       _error = null;
@@ -79,7 +82,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(
                               fontSize: 24, fontWeight: FontWeight.bold)),
                     ],
-                  ),
+                  )
+                      .animate()
+                      .fadeIn(duration: 400.ms)
+                      .scale(
+                          begin: const Offset(0.85, 0.85),
+                          end: const Offset(1, 1),
+                          curve: Curves.easeOutBack),
                   const SizedBox(height: 6),
                   const Text('レビュー対応を、ポケットの中で。',
                       textAlign: TextAlign.center,

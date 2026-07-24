@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import '../data.dart';
 import '../models.dart';
+import '../theme.dart';
+import '../ui.dart';
 import '../widgets.dart';
 import 'review_detail_screen.dart';
 
@@ -19,6 +23,9 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   String? _appFilter;
   int? _ratingFilter; // 1..5 で「その星のみ」
   bool _unrepliedOnly = false;
+
+  /// フィルタ条件のシグネチャ。変化時のみリストを再アニメーションさせる。
+  String get _filterSig => '$_appFilter-$_ratingFilter-$_unrepliedOnly';
 
   @override
   void initState() {
@@ -39,6 +46,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   }
 
   Future<void> _refresh() async {
+    HapticFeedback.mediumImpact();
     setState(_load);
     await _future;
   }
@@ -46,9 +54,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('レビュー', style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
+      appBar: AppBar(title: const Text('レビュー')),
       body: Column(
         children: [
           _filters(),
@@ -59,15 +65,19 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                 future: _future,
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const ReviewListSkeleton();
                   }
                   if (snap.hasError) {
                     return ListView(children: [
                       const SizedBox(height: 80),
                       EmptyState(
-                        icon: Icons.error_outline,
+                        icon: Icons.wifi_off_rounded,
                         title: '読み込みに失敗しました',
                         subtitle: '${snap.error}',
+                        action: FilledButton.tonal(
+                          onPressed: () => setState(_load),
+                          child: const Text('再試行'),
+                        ),
                       ),
                     ]);
                   }
@@ -86,15 +96,22 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                     padding: const EdgeInsets.all(16),
                     itemCount: reviews.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, i) => _ReviewCard(
-                      reviews[i],
-                      onTap: () async {
-                        await Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => ReviewDetailScreen(reviews[i]),
-                        ));
-                        _refresh();
-                      },
-                    ),
+                    itemBuilder: (_, i) {
+                      // 先頭12件のみ段階表示（大量スクロール時の負荷を避ける）。
+                      final delay = (i < 12 ? i * 45 : 0).ms;
+                      return _ReviewCard(
+                        reviews[i],
+                        onTap: () async {
+                          await Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => ReviewDetailScreen(reviews[i]),
+                          ));
+                          if (mounted) setState(_load);
+                        },
+                      )
+                          .animate(key: ValueKey('$_filterSig-$i'))
+                          .fadeIn(duration: 280.ms, delay: delay)
+                          .slideY(begin: 0.08, end: 0, curve: Curves.easeOutCubic);
+                    },
                   );
                 },
               ),
@@ -107,7 +124,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
 
   Widget _filters() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -115,37 +132,45 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
             FilterChip(
               label: const Text('未返信のみ'),
               selected: _unrepliedOnly,
-              onSelected: (v) => setState(() {
-                _unrepliedOnly = v;
-                _load();
-              }),
+              onSelected: (v) {
+                HapticFeedback.selectionClick();
+                setState(() {
+                  _unrepliedOnly = v;
+                  _load();
+                });
+              },
             ),
             const SizedBox(width: 8),
             for (final r in [5, 4, 3, 2, 1]) ...[
               FilterChip(
                 label: Text('★$r'),
                 selected: _ratingFilter == r,
-                onSelected: (v) => setState(() {
-                  _ratingFilter = v ? r : null;
-                  _load();
-                }),
+                onSelected: (v) {
+                  HapticFeedback.selectionClick();
+                  setState(() {
+                    _ratingFilter = v ? r : null;
+                    _load();
+                  });
+                },
               ),
               const SizedBox(width: 8),
             ],
             if (_apps.isNotEmpty)
-              DropdownButton<String?>(
-                value: _appFilter,
-                hint: const Text('全アプリ'),
-                underline: const SizedBox.shrink(),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('全アプリ')),
-                  for (final a in _apps)
-                    DropdownMenuItem(value: a.id, child: Text(a.name)),
-                ],
-                onChanged: (v) => setState(() {
-                  _appFilter = v;
-                  _load();
-                }),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String?>(
+                  value: _appFilter,
+                  hint: const Text('全アプリ'),
+                  borderRadius: BorderRadius.circular(12),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('全アプリ')),
+                    for (final a in _apps)
+                      DropdownMenuItem(value: a.id, child: Text(a.name)),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _appFilter = v;
+                    _load();
+                  }),
+                ),
               ),
           ],
         ),
@@ -167,7 +192,7 @@ class _ReviewCard extends StatelessWidget {
     return Card(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -212,9 +237,9 @@ class _ReviewCard extends StatelessWidget {
                       )),
                   const Spacer(),
                   if (review.isPosted)
-                    _statusBadge('返信済み', const Color(0xFF16A34A))
+                    _statusBadge('返信済み', AppTheme.success)
                   else if (review.hasReply)
-                    _statusBadge('下書きあり', const Color(0xFFCA8A04))
+                    _statusBadge('下書きあり', AppTheme.warning)
                   else
                     _statusBadge('未返信', Colors.grey),
                 ],

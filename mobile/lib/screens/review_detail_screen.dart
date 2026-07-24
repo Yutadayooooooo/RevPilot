@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import '../config.dart';
 import '../data.dart';
 import '../models.dart';
+import '../theme.dart';
+import '../ui.dart';
 import '../widgets.dart';
 
 class ReviewDetailScreen extends StatefulWidget {
@@ -36,46 +39,43 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
 
   Future<void> _saveDraft() async {
     if (_reply.text.trim().isEmpty) return;
+    HapticFeedback.lightImpact();
     setState(() => _saving = true);
     try {
       await Repo.saveManualReply(widget.review.id, _reply.text.trim());
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('下書きを保存しました')));
+        showSnack(context, '下書きを保存しました', kind: SnackKind.success);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('保存に失敗: $e')));
-      }
+      if (mounted) showSnack(context, '保存に失敗: $e', kind: SnackKind.error);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
   Future<void> _generateAi() async {
+    HapticFeedback.lightImpact();
     setState(() => _generating = true);
     try {
       final body = await Repo.generateAiReply(widget.review.id);
       if (body.isNotEmpty && mounted) {
+        HapticFeedback.mediumImpact();
         setState(() => _reply.text = body);
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('AIが返信を生成しました')));
+        showSnack(context, 'AIが返信を生成しました', kind: SnackKind.success);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
-      }
+      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
     } finally {
       if (mounted) setState(() => _generating = false);
     }
   }
 
   void _copyReply() {
+    if (_reply.text.trim().isEmpty) return;
+    HapticFeedback.selectionClick();
     Clipboard.setData(ClipboardData(text: _reply.text));
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('返信をコピーしました。ストアの管理画面に貼り付けてください。')));
+    showSnack(context, '返信をコピーしました。ストアの管理画面に貼り付けてください。',
+        kind: SnackKind.success);
   }
 
   @override
@@ -97,7 +97,15 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                 children: [
                   Row(
                     children: [
-                      StarRating(r.rating, size: 20),
+                      StarRating(r.rating, size: 20)
+                          .animate()
+                          .scale(
+                            begin: const Offset(0.7, 0.7),
+                            end: const Offset(1, 1),
+                            duration: 500.ms,
+                            curve: Curves.elasticOut,
+                          )
+                          .fadeIn(duration: 200.ms),
                       const Spacer(),
                       Text(date,
                           style: TextStyle(
@@ -140,7 +148,8 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                 ],
               ),
             ),
-          ),
+          ).animate().fadeIn(duration: 260.ms).slideY(
+              begin: 0.04, end: 0, curve: Curves.easeOut),
           const SizedBox(height: 20),
           Row(
             children: [
@@ -164,16 +173,38 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                     style:
                         TextStyle(fontSize: 11, color: Colors.grey.shade500)),
             ],
-          ),
+          ).animate(delay: 120.ms).fadeIn(duration: 240.ms),
           const SizedBox(height: 8),
-          TextField(
-            controller: _reply,
-            maxLines: 6,
-            decoration: const InputDecoration(
-              hintText: 'お客様への返信を入力…',
-              alignLabelWithHint: true,
-            ),
-          ),
+          Stack(
+            children: [
+              TextField(
+                controller: _reply,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  hintText: 'お客様への返信を入力…',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              // AI生成中は入力欄にシマーを重ねて「生成中」を表現。
+              if (_generating)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    )
+                        .animate(onPlay: (c) => c.repeat())
+                        .shimmer(
+                          duration: 1000.ms,
+                          color: AppTheme.primary.withValues(alpha: 0.10),
+                        ),
+                  ),
+                ),
+            ],
+          ).animate(delay: 180.ms).fadeIn(duration: 240.ms).slideY(
+              begin: 0.05, end: 0, curve: Curves.easeOut),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -199,7 +230,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                 ),
               ),
             ],
-          ),
+          ).animate(delay: 240.ms).fadeIn(duration: 240.ms),
         ],
       ),
     );

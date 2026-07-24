@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../data.dart';
 import '../models.dart';
@@ -23,6 +25,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   Future<void> _refresh() async {
+    HapticFeedback.mediumImpact();
     setState(() => _future = Repo.reviews());
     await _future;
   }
@@ -30,16 +33,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('分析', style: TextStyle(fontWeight: FontWeight.bold)),
-      ),
+      appBar: AppBar(title: const Text('分析')),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: FutureBuilder<List<ReviewRow>>(
           future: _future,
           builder: (context, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const _AnalyticsSkeleton();
             }
             final reviews = snap.data ?? [];
             if (reviews.isEmpty) {
@@ -52,14 +53,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ),
               ]);
             }
+            var i = 0;
+            Widget staggered(Widget child) => child
+                .animate(delay: (80 * i++).ms)
+                .fadeIn(duration: 300.ms)
+                .slideY(begin: 0.06, end: 0, curve: Curves.easeOut);
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _summaryRow(reviews),
+                staggered(_summaryRow(reviews)),
                 const SizedBox(height: 16),
-                _ratingDistribution(reviews),
+                staggered(_ratingDistribution(reviews)),
                 const SizedBox(height: 16),
-                _topicBreakdown(reviews),
+                staggered(_topicBreakdown(reviews)),
               ],
             );
           },
@@ -75,22 +81,23 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     return Row(
       children: [
         Expanded(
-            child: _statCard(
-                '平均評価', avg.toStringAsFixed(2), Icons.star_rounded,
-                color: AppTheme.ratingColor(avg.round()))),
+            child: _statCard('平均評価', avg, Icons.star_rounded,
+                decimals: 2, color: AppTheme.ratingColor(avg.round()))),
         const SizedBox(width: 12),
         Expanded(
-            child: _statCard('レビュー数', '${reviews.length}',
+            child: _statCard('レビュー数', reviews.length.toDouble(),
                 Icons.rate_review_outlined)),
         const SizedBox(width: 12),
         Expanded(
-            child: _statCard('未返信', '$unreplied', Icons.mark_email_unread_outlined,
-                color: unreplied > 0 ? const Color(0xFFDC2626) : null)),
+            child: _statCard('未返信', unreplied.toDouble(),
+                Icons.mark_email_unread_outlined,
+                color: unreplied > 0 ? AppTheme.danger : null)),
       ],
     );
   }
 
-  Widget _statCard(String label, String value, IconData icon, {Color? color}) {
+  Widget _statCard(String label, double value, IconData icon,
+      {int decimals = 0, Color? color}) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -99,11 +106,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           children: [
             Icon(icon, size: 18, color: color ?? Colors.grey.shade500),
             const SizedBox(height: 8),
-            Text(value,
-                style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: color ?? Colors.black87)),
+            _CountUp(
+              value,
+              decimals: decimals,
+              style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: color ?? AppTheme.ink),
+            ),
             Text(label,
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
           ],
@@ -117,8 +127,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     for (final r in reviews) {
       counts[r.rating] = (counts[r.rating] ?? 0) + 1;
     }
-    final maxCount =
-        counts.values.fold<int>(1, (m, v) => v > m ? v : m);
+    final maxCount = counts.values.fold<int>(1, (m, v) => v > m ? v : m);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -138,11 +147,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   Expanded(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: (counts[star] ?? 0) / maxCount,
-                        minHeight: 10,
-                        backgroundColor: const Color(0xFFEEF2F7),
-                        color: AppTheme.ratingColor(star),
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(
+                            begin: 0, end: (counts[star] ?? 0) / maxCount),
+                        duration: const Duration(milliseconds: 800),
+                        curve: Curves.easeOutCubic,
+                        builder: (_, v, __) => LinearProgressIndicator(
+                          value: v,
+                          minHeight: 10,
+                          backgroundColor: const Color(0xFFEEF2F7),
+                          color: AppTheme.ratingColor(star),
+                        ),
                       ),
                     ),
                   ),
@@ -199,18 +214,72 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: sorted
-                  .map((e) => Chip(
-                        label: Text(
-                            '${topicLabels[e.key] ?? e.key} ${e.value}'),
-                        backgroundColor: AppTheme.primary.withValues(alpha: 0.06),
-                        side: BorderSide.none,
-                      ))
-                  .toList(),
+              children: [
+                for (var k = 0; k < sorted.length; k++)
+                  Chip(
+                    label: Text(
+                        '${topicLabels[sorted[k].key] ?? sorted[k].key} ${sorted[k].value}'),
+                    backgroundColor: AppTheme.primary.withValues(alpha: 0.06),
+                    side: BorderSide.none,
+                  )
+                      .animate(delay: (300 + 60 * k).ms)
+                      .fadeIn(duration: 220.ms)
+                      .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1)),
+              ],
             ),
           ],
         ),
       ),
     );
+  }
+}
+
+/// 数値を0から目標値へカウントアップ表示する。
+class _CountUp extends StatelessWidget {
+  final double value;
+  final int decimals;
+  final TextStyle style;
+  const _CountUp(this.value, {this.decimals = 0, required this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: value),
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.easeOutCubic,
+      builder: (_, v, __) => Text(v.toStringAsFixed(decimals), style: style),
+    );
+  }
+}
+
+/// 分析ロード中のシマー・スケルトン。
+class _AnalyticsSkeleton extends StatelessWidget {
+  const _AnalyticsSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget card(double height) => Card(
+          child: SizedBox(height: height, width: double.infinity),
+        );
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      physics: const NeverScrollableScrollPhysics(),
+      children: [
+        Row(children: [
+          Expanded(child: card(84)),
+          const SizedBox(width: 12),
+          Expanded(child: card(84)),
+          const SizedBox(width: 12),
+          Expanded(child: card(84)),
+        ]),
+        const SizedBox(height: 16),
+        card(220),
+        const SizedBox(height: 16),
+        card(120),
+      ],
+    ).animate(onPlay: (c) => c.repeat()).shimmer(
+          duration: 1100.ms,
+          color: Colors.white.withValues(alpha: 0.6),
+        );
   }
 }
