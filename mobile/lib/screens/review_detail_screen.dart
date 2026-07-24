@@ -18,6 +18,7 @@ class ReviewDetailScreen extends StatefulWidget {
 class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
   late final TextEditingController _reply;
   bool _saving = false;
+  bool _generating = false;
 
   @override
   void initState() {
@@ -49,6 +50,25 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
       }
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _generateAi() async {
+    setState(() => _generating = true);
+    try {
+      final body = await Repo.generateAiReply(widget.review.id);
+      if (body.isNotEmpty && mounted) {
+        setState(() => _reply.text = body);
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('AIが返信を生成しました')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _generating = false);
     }
   }
 
@@ -127,9 +147,20 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
               const Text('返信',
                   style:
                       TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 8),
-              if (!AppConfig.hasApi)
-                Text('（AI生成はサーバー接続後に有効）',
+              const Spacer(),
+              if (AppConfig.hasApi)
+                TextButton.icon(
+                  onPressed: _generating ? null : _generateAi,
+                  icon: _generating
+                      ? const SizedBox(
+                          height: 16,
+                          width: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.auto_awesome, size: 18),
+                  label: Text(_generating ? '生成中…' : 'AIで生成'),
+                )
+              else
+                Text('AI生成はサーバー接続後に有効',
                     style:
                         TextStyle(fontSize: 11, color: Colors.grey.shade500)),
             ],

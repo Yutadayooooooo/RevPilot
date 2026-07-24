@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
@@ -39,6 +42,38 @@ class Repo {
     return list;
   }
 
+  /// AI返信の生成。Next.jsの /api/reply をSupabaseのアクセストークン付きで呼ぶ。
+  /// 生成された返信は replies に保存され、本文が返る。
+  static Future<String> generateAiReply(String reviewId) async {
+    if (!AppConfig.hasApi) {
+      throw const ApiException('AIサーバーが未設定です（API_BASE_URLを設定してください）。');
+    }
+    final token = _db.auth.currentSession?.accessToken;
+    if (token == null) {
+      throw const ApiException('ログインが必要です。');
+    }
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/reply');
+    final res = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'reviewId': reviewId, 'action': 'draft'}),
+    );
+    Map<String, dynamic> json = {};
+    try {
+      json = jsonDecode(res.body) as Map<String, dynamic>;
+    } catch (_) {}
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      final reply = json['reply'];
+      final body = reply is Map ? reply['body'] as String? : null;
+      return body ?? '';
+    }
+    final msg = (json['error'] as String?) ?? 'エラーが発生しました (${res.statusCode})';
+    throw ApiException(msg);
+  }
+
   /// 手動更新（ストアから新着レビュー取得）はNext.js API連携後に実装予定。
   static bool get canRefresh => AppConfig.hasApi;
 
@@ -65,4 +100,12 @@ class Repo {
         .single();
     return ReplyRow.fromJson(Map<String, dynamic>.from(row));
   }
+}
+
+/// APIエラー（ユーザー向けメッセージを保持）。
+class ApiException implements Exception {
+  final String message;
+  const ApiException(this.message);
+  @override
+  String toString() => message;
 }

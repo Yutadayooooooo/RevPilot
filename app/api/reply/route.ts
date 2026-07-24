@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSupabaseServer, getCurrentUser } from "@/lib/supabase/server";
+import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { draftReply } from "@/lib/ai";
 import { replyToGooglePlayReview } from "@/lib/googleplay";
 import { limitsForPlan, monthStartISO } from "@/lib/plan";
@@ -32,13 +32,14 @@ async function aiQuotaError(db: SupabaseClient, userId: string): Promise<string 
  * body: { reviewId, action: "draft" | "post", text? }
  * - draft: AI返信文を生成して replies に保存（iOS/Android共通）
  * - post : Androidのみ reviews.reply で自動投稿
+ * 認証はWebのcookieセッションeither、モバイルの Authorization: Bearer <jwt> の両対応。
  * すべて RLS で自分のアプリのレビューに限定される。
  */
 export async function POST(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const auth = await resolveApiAuth(req);
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { user, db } = auth;
 
-  const db = createSupabaseServer();
   const { reviewId, action = "draft", text } = await req.json();
   if (!reviewId) return NextResponse.json({ error: "reviewId required" }, { status: 400 });
 
@@ -52,6 +53,12 @@ export async function POST(req: NextRequest) {
   const app = (review as any).apps;
 
   if (action === "draft") {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json(
+        { error: "AI返信は現在ご利用いただけません（サーバー側のAI設定が未完了です）。" },
+        { status: 501 }
+      );
+    }
     const quotaErr = await aiQuotaError(db, user.id);
     if (quotaErr) return NextResponse.json({ error: quotaErr }, { status: 403 });
     const body = await draftReply(
@@ -77,7 +84,13 @@ export async function POST(req: NextRequest) {
     }
     let body = text;
     if (!body) {
-      // 本文が渡されていない＝ここでAI生成するので上限をチェック
+      // 本文が渡されていない＝ここでAI生成するので上限とAI設定をチェック
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return NextResponse.json(
+          { error: "AI返信は現在ご利用いただけません（サーバー側のAI設定が未完了です）。" },
+          { status: 501 }
+        );
+      }
       const quotaErr = await aiQuotaError(db, user.id);
       if (quotaErr) return NextResponse.json({ error: quotaErr }, { status: 403 });
       body = await draftReply(
