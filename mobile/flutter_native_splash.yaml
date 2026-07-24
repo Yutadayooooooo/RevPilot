@@ -1,0 +1,9 @@
+# 起動スプラッシュ設定。`dart run flutter_native_splash:create` で反映。
+flutter_native_splash:
+  color: "#4F46E5"
+  image: assets/branding/foreground.png
+  android_12:
+    color: "#4F46E5"
+    image: assets/branding/foreground.png
+  ios: true
+  android: true
