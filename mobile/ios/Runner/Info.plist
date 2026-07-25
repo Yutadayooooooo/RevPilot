@@ -68,5 +68,13 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<!-- 開発時、同一LAN上のNext.jsサーバー(http://192.168.x.x:3000)へ接続するための例外。
+		     RFC1918 / link-local / .local のみ平文HTTPを許可し、任意ドメインの平文通信は許可しない。
+		     本番は https のAPIに向けるため、この例外は開発用途に限定される。 -->
+		<key>NSAppTransportSecurity</key>
+		<dict>
+			<key>NSAllowsLocalNetworking</key>
+			<true/>
+		</dict>
 	</dict>
 </plist>

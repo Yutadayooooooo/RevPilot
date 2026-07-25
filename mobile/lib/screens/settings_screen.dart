@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../data.dart';
@@ -57,6 +58,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) showSnack(context, '$e', kind: SnackKind.error);
     } finally {
       if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  /// 規約・ポリシー等をアプリ内ブラウザで開く。Web(Next.js)側で公開しているページ。
+  Future<void> _openLegal(String path) async {
+    if (!AppConfig.hasApi) {
+      showSnack(context, 'サーバーURLが未設定です（config/app_config.json）',
+          kind: SnackKind.error);
+      return;
+    }
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}$path');
+    final ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+    if (!ok && mounted) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -174,6 +189,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: _refreshing ? null : _refreshFromStores,
                 ),
               ]),
+              const SizedBox(height: 16),
+
+              // 情報・法務
+              _sectionLabel('情報'),
+              _navCard([
+                _navTile(
+                  icon: Icons.description_outlined,
+                  title: '利用規約',
+                  subtitle: '',
+                  onTap: () => _openLegal('/terms'),
+                ),
+                _divider(),
+                _navTile(
+                  icon: Icons.privacy_tip_outlined,
+                  title: 'プライバシーポリシー',
+                  subtitle: '',
+                  onTap: () => _openLegal('/privacy'),
+                ),
+                _divider(),
+                _navTile(
+                  icon: Icons.receipt_long_outlined,
+                  title: '特定商取引法に基づく表記',
+                  subtitle: '',
+                  onTap: () => _openLegal('/tokushoho'),
+                ),
+              ]),
               const SizedBox(height: 28),
 
               OutlinedButton.icon(
@@ -226,7 +267,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         leading: Icon(icon, color: AppTheme.primary),
         title: Text(title,
             style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+        subtitle: subtitle.isEmpty
+            ? null
+            : Text(subtitle, style: const TextStyle(fontSize: 12)),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
       );
