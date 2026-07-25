@@ -19,7 +19,7 @@ class StarRating extends StatelessWidget {
         (i) => Icon(
           i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
           size: size,
-          color: i < rating ? color : Colors.grey.shade300,
+          color: i < rating ? color : context.borderC,
         ),
       ),
     );
@@ -70,7 +70,7 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 44, color: Colors.grey.shade400),
+            Icon(icon, size: 44, color: context.faintC),
             const SizedBox(height: 12),
             Text(title,
                 style: const TextStyle(
@@ -79,7 +79,7 @@ class EmptyState extends StatelessWidget {
               const SizedBox(height: 6),
               Text(subtitle!,
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade600)),
+                  style: TextStyle(color: context.subtleC)),
             ],
             if (action != null) ...[const SizedBox(height: 16), action!],
           ],

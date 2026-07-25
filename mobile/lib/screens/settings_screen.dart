@@ -232,7 +232,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
 
   Widget _divider() =>
-      Divider(height: 1, indent: 56, color: AppTheme.border);
+      Divider(height: 1, indent: 56, color: context.borderC);
 
   Widget _card({required String title, required Widget child}) {
     return Card(
@@ -268,7 +268,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       decoration: BoxDecoration(
         color: isPaid
             ? AppTheme.primary.withValues(alpha: 0.12)
-            : Colors.grey.shade200,
+            : context.subtleSurfaceC,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(

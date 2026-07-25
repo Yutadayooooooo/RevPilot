@@ -217,8 +217,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                     if (a.body != null && a.body!.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(a.body!,
-                          style: const TextStyle(
-                              fontSize: 13, color: Color(0xFF334155))),
+                          style: TextStyle(fontSize: 13, color: context.inkC)),
                     ],
                   ],
                 ),
@@ -275,16 +274,18 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(
-          color: active ? AppTheme.primary.withValues(alpha: 0.08) : Colors.white,
+          color: active
+              ? AppTheme.primary.withValues(alpha: 0.12)
+              : context.surfaceC,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: active ? AppTheme.primary : AppTheme.border),
+              color: active ? AppTheme.primary : context.borderC),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon,
-                size: 18, color: active ? AppTheme.primary : AppTheme.ink),
+                size: 18, color: active ? AppTheme.primary : context.inkC),
             const SizedBox(width: 6),
             Flexible(
               child: Text(label,
@@ -292,7 +293,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: active ? AppTheme.primary : AppTheme.ink)),
+                      color: active ? AppTheme.primary : context.inkC)),
             ),
             if (badge != null) ...[
               const SizedBox(width: 6),
@@ -439,7 +440,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
     if (!mounted) return;
     final choice = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: context.surfaceC,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -511,7 +512,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
 
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: context.surfaceC,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -530,7 +531,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: AppTheme.border,
+                        color: context.borderC,
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
@@ -645,16 +646,16 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         duration: const Duration(milliseconds: 140),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
         decoration: BoxDecoration(
-          color: selected ? AppTheme.primary : Colors.white,
+          color: selected ? AppTheme.primary : context.surfaceC,
           borderRadius: BorderRadius.circular(999),
           border:
-              Border.all(color: selected ? AppTheme.primary : AppTheme.border),
+              Border.all(color: selected ? AppTheme.primary : context.borderC),
         ),
         child: Text(label,
             style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : AppTheme.ink)),
+                color: selected ? Colors.white : context.inkC)),
       ),
     );
   }
@@ -663,7 +664,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   Future<void> _openSortSheet() async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: context.surfaceC,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -677,7 +678,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppTheme.border,
+                  color: context.borderC,
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
@@ -696,7 +697,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                       style: TextStyle(
                         fontWeight:
                             _sort == s ? FontWeight.w700 : FontWeight.w500,
-                        color: _sort == s ? AppTheme.primary : AppTheme.ink,
+                        color: _sort == s ? AppTheme.primary : context.inkC,
                       )),
                   trailing: _sort == s
                       ? const Icon(Icons.check_rounded,
@@ -767,7 +768,7 @@ class _ReviewCard extends StatelessWidget {
                 Text(review.body!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Colors.grey.shade800)),
+                    style: TextStyle(color: context.inkC)),
               ],
               const SizedBox(height: 10),
               Row(

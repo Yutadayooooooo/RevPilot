@@ -9,7 +9,9 @@ import 'screens/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(AppTheme.overlay);
+  final brightness =
+      WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  SystemChrome.setSystemUIOverlayStyle(AppTheme.overlayFor(brightness));
 
   if (AppConfig.isConfigured) {
     await Supabase.initialize(
@@ -30,6 +32,8 @@ class RevPilotApp extends StatelessWidget {
       title: 'RevPilot',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: ThemeMode.system,
       home: AppConfig.isConfigured ? const AuthGate() : const _ConfigError(),
     );
   }

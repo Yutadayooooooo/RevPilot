@@ -38,7 +38,7 @@ class SkeletonBox extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: const Color(0xFFE9EEF5),
+        color: context.skeletonC,
         borderRadius: BorderRadius.circular(radius),
       ),
     );

@@ -116,9 +116,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: context.surfaceC,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: AppTheme.border),
+            border: Border.all(color: context.borderC),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -131,7 +131,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       fontSize: 13, fontWeight: FontWeight.w600)),
               const SizedBox(width: 2),
               Icon(Icons.keyboard_arrow_down_rounded,
-                  size: 18, color: AppTheme.ink),
+                  size: 18, color: context.inkC),
             ],
           ),
         ),
@@ -145,7 +145,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     final hasGoogle = _apps.any((a) => a.store == 'googleplay');
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: context.surfaceC,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -159,7 +159,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             title: Text(label,
                 style: TextStyle(
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? AppTheme.primary : AppTheme.ink,
+                  color: selected ? AppTheme.primary : context.inkC,
                 )),
             trailing: selected
                 ? const Icon(Icons.check_rounded, color: AppTheme.primary)
@@ -186,7 +186,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppTheme.border,
+                    color: context.borderC,
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -256,7 +256,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: color ?? AppTheme.ink),
+                  color: color ?? context.inkC),
             ),
             Text(label,
                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
@@ -418,7 +418,7 @@ class _GrowBarState extends State<_GrowBar>
         builder: (_, __) => LinearProgressIndicator(
           value: _a.value * widget.value,
           minHeight: 10,
-          backgroundColor: const Color(0xFFEEF2F7),
+          backgroundColor: context.trackC,
           color: widget.color,
         ),
       ),
