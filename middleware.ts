@@ -31,7 +31,9 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = req.nextUrl.pathname;
-  const isPublic = path.startsWith("/login") || path.startsWith("/auth");
+  // 法務ページ（利用規約・プライバシー・特商法）は公開。ストア審査や一般の閲覧に必要。
+  const publicPaths = ["/login", "/auth", "/terms", "/privacy", "/tokushoho"];
+  const isPublic = publicPaths.some((p) => path.startsWith(p));
   if (!user && !isPublic) {
     const redirect = req.nextUrl.clone();
     redirect.pathname = "/login";
