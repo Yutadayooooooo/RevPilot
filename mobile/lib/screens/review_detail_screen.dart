@@ -83,7 +83,9 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
       await Repo.postReplyToStore(widget.review.id, text: _reply.text.trim());
       HapticFeedback.mediumImpact();
       if (mounted) {
-        showSnack(context, 'Google Playに投稿しました', kind: SnackKind.success);
+        final label =
+            widget.review.store == 'appstore' ? 'App Store' : 'Google Play';
+        showSnack(context, '$labelに投稿しました', kind: SnackKind.success);
         Navigator.pop(context);
       }
     } catch (e) {
@@ -268,36 +270,33 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
               ),
             ],
           ).animate(delay: 240.ms).fadeIn(duration: 240.ms),
-          if (r.store == 'googleplay') ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _posting ? null : _postToStore,
-                icon: _posting
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.send_rounded, size: 18),
-                label: const Text('Google Playに投稿'),
-              ),
-            ).animate(delay: 300.ms).fadeIn(duration: 240.ms),
-          ] else ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: _openAppStoreConnect,
-                icon: const Icon(Icons.open_in_new, size: 18),
-                label: const Text('App Store Connectを開く'),
-              ),
-            ).animate(delay: 300.ms).fadeIn(duration: 240.ms),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: _posting ? null : _postToStore,
+              icon: _posting
+                  ? const SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.send_rounded, size: 18),
+              label: Text(
+                  r.store == 'appstore' ? 'App Storeに投稿' : 'Google Playに投稿'),
+            ),
+          ).animate(delay: 300.ms).fadeIn(duration: 240.ms),
+          if (r.store == 'appstore') ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _openAppStoreConnect,
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: const Text('App Store Connectを開く'),
+            ),
             const SizedBox(height: 8),
             Text(
-              'App Storeはアプリからの自動投稿に対応していないため、上の「コピー」で本文をコピーし、'
-              'App Store Connectのこのレビューに貼り付けて返信してください。',
+              'App Store側の返信APIは不安定な場合があります。自動投稿に失敗するときは'
+              '「コピー」で本文をコピーし、App Store Connectのこのレビューに貼り付けてください。',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             ),
           ],

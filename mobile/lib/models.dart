@@ -130,6 +130,28 @@ DateTime? _dt(dynamic v) {
   return null;
 }
 
+/// 運営からのお知らせ。
+class Announcement {
+  final String id;
+  final String title;
+  final String? body;
+  final String level; // info | warning | critical
+
+  Announcement({
+    required this.id,
+    required this.title,
+    this.body,
+    this.level = 'info',
+  });
+
+  factory Announcement.fromJson(Map<String, dynamic> j) => Announcement(
+        id: j['id'] as String,
+        title: (j['title'] as String?) ?? '',
+        body: j['body'] as String?,
+        level: (j['level'] as String?) ?? 'info',
+      );
+}
+
 /// トピックの日本語ラベル（Web分析画面と統一）。
 const topicLabels = {
   'bug': '不具合',

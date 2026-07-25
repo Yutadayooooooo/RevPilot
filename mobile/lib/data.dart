@@ -100,28 +100,57 @@ class Repo {
   }
 
   // ---- レビュー ----
-  /// レビュー一覧。星・アプリ・ストア・未返信でのフィルタに対応。
+  /// レビュー一覧。星（複数可）・アプリ・ストア・未返信フィルタと並び替えに対応。
   static Future<List<ReviewRow>> reviews({
     String? appId,
     String? store,
-    int? minRating,
-    int? maxRating,
+    List<int>? ratings,
     bool unrepliedOnly = false,
+    ReviewSort sort = ReviewSort.newest,
   }) async {
     var query = _db.from('reviews').select(
         '*, apps!inner(name), replies(*), review_topics(topic)');
 
     if (appId != null) query = query.eq('app_id', appId);
     if (store != null) query = query.eq('store', store);
-    if (minRating != null) query = query.gte('rating', minRating);
-    if (maxRating != null) query = query.lte('rating', maxRating);
+    if (ratings != null && ratings.isNotEmpty) {
+      query = query.inFilter('rating', ratings);
+    }
 
-    final rows = await query.order('reviewed_at', ascending: false).limit(200);
-    var list = (rows as List)
+    final ordered = switch (sort) {
+      ReviewSort.newest => query.order('reviewed_at', ascending: false),
+      ReviewSort.oldest => query.order('reviewed_at', ascending: true),
+      ReviewSort.highest => query
+          .order('rating', ascending: false)
+          .order('reviewed_at', ascending: false),
+      ReviewSort.lowest => query
+          .order('rating', ascending: true)
+          .order('reviewed_at', ascending: false),
+    };
+
+    final rows = await ordered.limit(200);
+    var listOut = (rows as List)
         .map((e) => ReviewRow.fromJson(Map<String, dynamic>.from(e)))
         .toList();
-    if (unrepliedOnly) list = list.where((r) => !r.hasReply).toList();
-    return list;
+    if (unrepliedOnly) listOut = listOut.where((r) => !r.hasReply).toList();
+    return listOut;
+  }
+
+  /// 運営からのお知らせ（有効かつ期間内のものだけRLSで返る）。
+  /// テーブル未作成などでも画面を落とさないよう、失敗時は空を返す。
+  static Future<List<Announcement>> announcements() async {
+    try {
+      final rows = await _db
+          .from('announcements')
+          .select('id, title, body, level')
+          .order('created_at', ascending: false)
+          .limit(5);
+      return (rows as List)
+          .map((e) => Announcement.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   /// AI返信の生成（API）。生成文は replies に保存され本文が返る。
@@ -216,6 +245,18 @@ class Repo {
         await _db.from('profiles').select('plan').eq('id', uid).maybeSingle();
     return (row?['plan'] as String?) ?? 'free';
   }
+}
+
+/// レビューの並び替え順。
+enum ReviewSort { newest, oldest, highest, lowest }
+
+extension ReviewSortLabel on ReviewSort {
+  String get label => switch (this) {
+        ReviewSort.newest => '新しい順',
+        ReviewSort.oldest => '古い順',
+        ReviewSort.highest => '評価が高い順',
+        ReviewSort.lowest => '評価が低い順',
+      };
 }
 
 /// プラン別アプリ数上限（null=無制限）。lib/plan.ts と一致させる。
