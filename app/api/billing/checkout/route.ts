@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * サブスク購入用の Stripe Checkout セッションを作成し、リダイレクト先URLを返す。
- * Web cookie / モバイル Bearer 両対応。body: { plan: "pro" | "team" }
+ * Web cookie / モバイル Bearer 両対応。body: { plan: "pro" | "max" }
  */
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
   const { user, db } = auth;
 
   const { plan } = (await req.json()) as { plan?: PlanKey };
-  if (plan !== "pro" && plan !== "team") {
-    return NextResponse.json({ error: "plan は pro / team のいずれか" }, { status: 400 });
+  if (plan !== "pro" && plan !== "max") {
+    return NextResponse.json({ error: "plan は pro / max のいずれか" }, { status: 400 });
   }
 
   const priceId = priceIdForPlan(plan);

@@ -6,7 +6,7 @@ import Stripe from "stripe";
  * UI/API は「課金未設定」として穏やかに縮退する。
  */
 
-export type PlanKey = "free" | "pro" | "team";
+export type PlanKey = "free" | "pro" | "max";
 
 export interface PlanDef {
   key: PlanKey;
@@ -14,25 +14,52 @@ export interface PlanDef {
   /** 表示用の価格ラベル */
   price: string;
   features: string[];
+  /** 中央（センターステージ）に置く推し。3層GBBの中間を最有力にする。 */
+  popular?: boolean;
   /** Stripe の price ID を入れた環境変数名（free は課金なし） */
-  priceEnv?: "STRIPE_PRICE_PRO" | "STRIPE_PRICE_TEAM";
+  priceEnv?: "STRIPE_PRICE_PRO" | "STRIPE_PRICE_MAX";
 }
 
+/**
+ * 個人開発者向けの Good-Better-Best 3層。
+ * - 競合(Appbot $49~ / AppFollow $99~)より大幅に安価に設定（インディー価格）。
+ * - 一括返信を段階的な価値軸に：Free=1件ずつ / Pro=最大20件 / Max=全件一括。
+ * - Pro を「おすすめ」にしてセンターステージ効果で中間を最有力に。
+ */
 export const PLANS: PlanDef[] = [
-  { key: "free", name: "Free", price: "¥0", features: ["1アプリ", "手動更新", "AI返信 月10件"] },
+  {
+    key: "free",
+    name: "Free",
+    price: "¥0",
+    features: ["1アプリ", "AI返信 月10件", "返信は1件ずつ", "手動更新"],
+  },
   {
     key: "pro",
     name: "Pro",
     price: "¥1,480/月",
-    features: ["全アプリ", "自動取得", "AI返信 無制限", "週次サマリー"],
+    popular: true,
+    features: [
+      "5アプリまで",
+      "AI返信 無制限",
+      "一括返信 最大20件",
+      "自動取得",
+      "週次サマリー",
+    ],
     priceEnv: "STRIPE_PRICE_PRO",
   },
   {
-    key: "team",
-    name: "Team",
+    key: "max",
+    name: "Max",
     price: "¥2,980/月",
-    features: ["複数メンバー", "Slack連携", "競合監視"],
-    priceEnv: "STRIPE_PRICE_TEAM",
+    features: [
+      "アプリ無制限",
+      "AI返信 無制限",
+      "全レビュー 一括返信",
+      "自動取得",
+      "週次サマリー",
+      "優先処理",
+    ],
+    priceEnv: "STRIPE_PRICE_MAX",
   },
 ];
 
