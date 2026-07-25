@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../data.dart';
@@ -100,6 +101,15 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
         kind: SnackKind.success);
   }
 
+  Future<void> _openAppStoreConnect() async {
+    final uri = Uri.parse('https://appstoreconnect.apple.com/apps');
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) showSnack(context, 'ブラウザを開けませんでした', kind: SnackKind.error);
+    }
+  }
+
+  void _dismissKeyboard() => FocusScope.of(context).unfocus();
+
   @override
   Widget build(BuildContext context) {
     final r = widget.review;
@@ -108,9 +118,14 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
         : '';
     return Scaffold(
       appBar: AppBar(title: const Text('レビュー詳細')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      // 余白タップでキーボードを閉じる（スクロールでも閉じる）。
+      body: GestureDetector(
+        onTap: _dismissKeyboard,
+        behavior: HitTestBehavior.translucent,
+        child: ListView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.all(16),
+          children: [
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -270,13 +285,24 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
               ),
             ).animate(delay: 300.ms).fadeIn(duration: 240.ms),
           ] else ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _openAppStoreConnect,
+                icon: const Icon(Icons.open_in_new, size: 18),
+                label: const Text('App Store Connectを開く'),
+              ),
+            ).animate(delay: 300.ms).fadeIn(duration: 240.ms),
+            const SizedBox(height: 8),
             Text(
-              'App Storeは自動投稿に対応していないため、コピーしてApp Store Connectに貼り付けてください。',
+              'App Storeはアプリからの自動投稿に対応していないため、上の「コピー」で本文をコピーし、'
+              'App Store Connectのこのレビューに貼り付けて返信してください。',
               style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
             ),
           ],
         ],
+        ),
       ),
     );
   }

@@ -83,6 +83,18 @@ class _PlanScreenState extends State<PlanScreen> {
                   _current(),
                   const SizedBox(height: 20),
                   _planCard(
+                    plan: 'free',
+                    name: 'Free',
+                    price: '¥0',
+                    features: const [
+                      'アプリ 1件まで',
+                      'AI返信 月10件まで',
+                      '手動更新のみ（自動取得なし）',
+                      '週次サマリーメールなし',
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _planCard(
                     plan: 'pro',
                     name: 'Pro',
                     price: '¥1,480 / 月',
@@ -204,21 +216,35 @@ class _PlanScreenState extends State<PlanScreen> {
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: isCurrent
-                  ? OutlinedButton(
-                      onPressed: null,
-                      child: const Text('利用中'),
-                    )
-                  : FilledButton(
-                      onPressed: _busy == null ? () => _upgrade(plan) : null,
-                      child: _busy == plan
-                          ? const _MiniSpinner()
-                          : Text('$nameにアップグレード'),
-                    ),
+              child: _planAction(plan, name, isCurrent),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// プランごとのアクションボタン。
+  /// - 現在プラン → 「利用中」
+  /// - Free（有料からの移行）→ 解約導線（ポータル）
+  /// - Pro/Team → アップグレード
+  Widget _planAction(String plan, String name, bool isCurrent) {
+    if (isCurrent) {
+      return OutlinedButton(onPressed: null, child: const Text('利用中'));
+    }
+    if (plan == 'free') {
+      return OutlinedButton(
+        onPressed: _busy == null ? _manage : null,
+        child: _busy == 'portal'
+            ? const _MiniSpinner()
+            : const Text('無料に戻す（解約手続き）'),
+      );
+    }
+    return FilledButton(
+      onPressed: _busy == null ? () => _upgrade(plan) : null,
+      child: _busy == plan
+          ? const _MiniSpinner()
+          : Text('$nameにアップグレード'),
     );
   }
 }

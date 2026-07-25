@@ -100,9 +100,10 @@ class Repo {
   }
 
   // ---- レビュー ----
-  /// レビュー一覧。星・アプリ・未返信でのフィルタに対応。
+  /// レビュー一覧。星・アプリ・ストア・未返信でのフィルタに対応。
   static Future<List<ReviewRow>> reviews({
     String? appId,
+    String? store,
     int? minRating,
     int? maxRating,
     bool unrepliedOnly = false,
@@ -111,6 +112,7 @@ class Repo {
         '*, apps!inner(name), replies(*), review_topics(topic)');
 
     if (appId != null) query = query.eq('app_id', appId);
+    if (store != null) query = query.eq('store', store);
     if (minRating != null) query = query.gte('rating', minRating);
     if (maxRating != null) query = query.lte('rating', maxRating);
 

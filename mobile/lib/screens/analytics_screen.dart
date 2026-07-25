@@ -19,58 +19,202 @@ class AnalyticsScreen extends StatefulWidget {
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   late Future<List<ReviewRow>> _future;
+  List<AppRow> _apps = [];
+  String? _appId; // 特定アプリで絞り込み
+  String? _store; // 特定ストア全体で絞り込み（appIdとは排他）
 
   @override
   void initState() {
     super.initState();
     _future = Repo.reviews();
+    Repo.apps().then((a) {
+      if (mounted) setState(() => _apps = a);
+    }).catchError((_) {});
+  }
+
+  void _applyScope() {
+    _future = Repo.reviews(appId: _appId, store: _store);
   }
 
   Future<void> _refresh() async {
     HapticFeedback.mediumImpact();
-    setState(() => _future = Repo.reviews());
+    setState(_applyScope);
     await _future;
+  }
+
+  String get _scopeLabel {
+    if (_appId != null) {
+      for (final a in _apps) {
+        if (a.id == _appId) return a.name;
+      }
+      return 'アプリ';
+    }
+    if (_store == 'appstore') return 'App Store（全体）';
+    if (_store == 'googleplay') return 'Google Play（全体）';
+    return '全アプリ';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('分析')),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: FutureBuilder<List<ReviewRow>>(
-          future: _future,
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const _AnalyticsSkeleton();
-            }
-            final reviews = snap.data ?? [];
-            if (reviews.isEmpty) {
-              return ListView(children: const [
-                SizedBox(height: 80),
-                EmptyState(
-                  icon: Icons.insights_outlined,
-                  title: 'まだ分析できるデータがありません',
-                  subtitle: 'レビューが集まると平均評価や傾向を表示します。',
-                ),
-              ]);
-            }
-            var i = 0;
-            Widget staggered(Widget child) =>
-                child.animate(delay: (80 * i++).ms).fadeIn(duration: 300.ms);
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                staggered(_summaryRow(reviews)),
-                const SizedBox(height: 16),
-                staggered(_ratingDistribution(reviews)),
-                const SizedBox(height: 16),
-                staggered(_topicBreakdown(reviews)),
-              ],
-            );
-          },
+      body: Column(
+        children: [
+          _scopeBar(),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: FutureBuilder<List<ReviewRow>>(
+                future: _future,
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const _AnalyticsSkeleton();
+                  }
+                  final reviews = snap.data ?? [];
+                  if (reviews.isEmpty) {
+                    return ListView(children: const [
+                      SizedBox(height: 80),
+                      EmptyState(
+                        icon: Icons.insights_outlined,
+                        title: 'このスコープにはデータがありません',
+                        subtitle: '別のアプリ/ストアを選ぶか、レビューが集まるとここに表示されます。',
+                      ),
+                    ]);
+                  }
+                  var i = 0;
+                  Widget staggered(Widget child) => child
+                      .animate(delay: (80 * i++).ms)
+                      .fadeIn(duration: 300.ms);
+                  return ListView(
+                    // scope切替時にアニメを作り直し、バーの伸びを見せる
+                    key: ValueKey('${_appId ?? _store ?? "all"}-${reviews.length}'),
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      staggered(_summaryRow(reviews)),
+                      const SizedBox(height: 16),
+                      staggered(_ratingDistribution(reviews)),
+                      const SizedBox(height: 16),
+                      staggered(_topicBreakdown(reviews)),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _scopeBar() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        onTap: _apps.isEmpty ? null : _pickScope,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: AppTheme.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.filter_list_rounded,
+                  size: 18, color: AppTheme.primary),
+              const SizedBox(width: 6),
+              Text(_scopeLabel,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 2),
+              Icon(Icons.keyboard_arrow_down_rounded,
+                  size: 18, color: AppTheme.ink),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  Future<void> _pickScope() async {
+    HapticFeedback.selectionClick();
+    final hasAppstore = _apps.any((a) => a.store == 'appstore');
+    final hasGoogle = _apps.any((a) => a.store == 'googleplay');
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        Widget tile(String label, IconData icon,
+            {String? appId, String? store}) {
+          final selected = _appId == appId && _store == store;
+          return ListTile(
+            leading: Icon(icon,
+                color: selected ? AppTheme.primary : Colors.grey.shade700),
+            title: Text(label,
+                style: TextStyle(
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected ? AppTheme.primary : AppTheme.ink,
+                )),
+            trailing: selected
+                ? const Icon(Icons.check_rounded, color: AppTheme.primary)
+                : null,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() {
+                _appId = appId;
+                _store = store;
+                _applyScope();
+              });
+              Navigator.pop(ctx);
+            },
+          );
+        }
+
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.border,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('分析するスコープ',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                ),
+                tile('全アプリ', Icons.dashboard_outlined),
+                if (hasAppstore)
+                  tile('App Store（全体）', Icons.apple, store: 'appstore'),
+                if (hasGoogle)
+                  tile('Google Play（全体）', Icons.android, store: 'googleplay'),
+                if (_apps.isNotEmpty) const Divider(height: 1),
+                for (final a in _apps)
+                  tile(a.name,
+                      a.store == 'appstore' ? Icons.apple : Icons.android,
+                      appId: a.id),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
