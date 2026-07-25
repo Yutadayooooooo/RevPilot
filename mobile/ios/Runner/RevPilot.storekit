@@ -1,0 +1,90 @@
+{
+  "identifier" : "REVPILOT_STOREKIT",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "ja_JP",
+    "_storefront" : "JPN",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "revpilot_group",
+      "localizations" : [],
+      "name" : "RevPilot Plans",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "1480",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "revpilot_pro",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "アプリ5件・AI返信・一括返信20件",
+              "displayName" : "RevPilot Pro",
+              "locale" : "ja_JP"
+            }
+          ],
+          "productID" : "com.yutatomatsu.revpilot.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "RevPilot Pro",
+          "subscriptionGroupID" : "revpilot_group",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "2980",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "revpilot_max",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "アプリ無制限・全レビュー一括返信",
+              "displayName" : "RevPilot Max",
+              "locale" : "ja_JP"
+            }
+          ],
+          "productID" : "com.yutatomatsu.revpilot.max.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "RevPilot Max",
+          "subscriptionGroupID" : "revpilot_group",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "5800",
+          "familyShareable" : false,
+          "groupNumber" : 3,
+          "internalID" : "revpilot_team",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Maxの全機能・複数メンバー共有",
+              "displayName" : "RevPilot Team",
+              "locale" : "ja_JP"
+            }
+          ],
+          "productID" : "com.yutatomatsu.revpilot.team.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "RevPilot Team",
+          "subscriptionGroupID" : "revpilot_group",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

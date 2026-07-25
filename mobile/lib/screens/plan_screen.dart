@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../data.dart';
+import '../iap.dart';
 import '../theme.dart';
 import '../ui.dart';
 
@@ -19,10 +22,41 @@ class _PlanScreenState extends State<PlanScreen> {
   bool _loading = true;
   String? _busy; // 実行中のアクション識別子
 
+  // App内課金（当面iOSのStoreKitローカルテスト用）。商品を取得できたときだけ使う。
+  final IapService _iap = IapService();
+  bool _iapReady = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _initIap();
+  }
+
+  @override
+  void dispose() {
+    _iap.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initIap() async {
+    if (!IapService.platformSupported) return;
+    await _iap.init(
+      onPurchased: (planKey) {
+        if (!mounted) return;
+        setState(() => _busy = null);
+        // ローカルテストでは購入は擬似成立。本番のプラン確定はサーバー検証実装後。
+        showSnack(context,
+            '購入が完了しました（テスト）。本番反映はサーバー検証の実装後に有効になります。',
+            kind: SnackKind.success);
+      },
+      onError: (message) {
+        if (!mounted) return;
+        setState(() => _busy = null);
+        showSnack(context, message, kind: SnackKind.error);
+      },
+    );
+    if (mounted) setState(() => _iapReady = _iap.isReady);
   }
 
   Future<void> _load() async {
@@ -32,6 +66,20 @@ class _PlanScreenState extends State<PlanScreen> {
         _plan = p;
         _loading = false;
       });
+    }
+  }
+
+  /// IAPで購入開始（ネイティブ購入シート）。結果は _initIap のコールバックで処理。
+  Future<void> _buyIap(String plan) async {
+    HapticFeedback.lightImpact();
+    setState(() => _busy = plan);
+    try {
+      await _iap.buy(plan);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = null);
+        showSnack(context, '$e', kind: SnackKind.error);
+      }
     }
   }
 
@@ -304,8 +352,13 @@ class _PlanScreenState extends State<PlanScreen> {
             : Text('$nameに変更（管理画面）'),
       );
     }
+    // iOSでStoreKit（IAP）が使える状態なら、ネイティブ購入シートで購入。
+    // まだStoreKit設定が無い等で商品未取得なら、従来のStripe Checkoutにフォールバック。
+    final useIap = Platform.isIOS && _iapReady;
     return FilledButton(
-      onPressed: _busy == null ? () => _upgrade(plan) : null,
+      onPressed: _busy == null
+          ? () => useIap ? _buyIap(plan) : _upgrade(plan)
+          : null,
       child: _busy == plan
           ? const _MiniSpinner()
           : Text('$nameにアップグレード'),

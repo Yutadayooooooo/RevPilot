@@ -39,6 +39,8 @@ dependencies:
   http: ^1.6.0
   flutter_animate: ^4.5.2
   url_launcher: ^6.3.2
+  # iOS/AndroidのApp内課金（当面はStoreKitローカルテスト用。本番はRevenueCat等へ）
+  in_app_purchase: ^3.2.0
 
 dev_dependencies:
   flutter_test:
