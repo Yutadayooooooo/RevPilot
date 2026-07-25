@@ -24,11 +24,13 @@ export const PLAN_LIMITS: Record<PlanKey, PlanLimits> = {
   free: { maxApps: 1, aiRepliesPerMonth: 10, bulkReplyLimit: 1, autoPolling: false, weeklySummary: false },
   pro: { maxApps: 5, aiRepliesPerMonth: null, bulkReplyLimit: 20, autoPolling: true, weeklySummary: true },
   max: { maxApps: null, aiRepliesPerMonth: null, bulkReplyLimit: null, autoPolling: true, weeklySummary: true },
+  // Team は Max と同等の機能上限（差別化はメンバー共有など運用面）。
+  team: { maxApps: null, aiRepliesPerMonth: null, bulkReplyLimit: null, autoPolling: true, weeklySummary: true },
 };
 
 /** plan文字列（不正値含む）から制限を取得。未知の値はFree扱い。 */
 export function limitsForPlan(plan: string | null | undefined): PlanLimits {
-  if (plan === "pro" || plan === "max") return PLAN_LIMITS[plan];
+  if (plan === "pro" || plan === "max" || plan === "team") return PLAN_LIMITS[plan];
   return PLAN_LIMITS.free;
 }
 

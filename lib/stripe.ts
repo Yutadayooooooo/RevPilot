@@ -6,7 +6,7 @@ import Stripe from "stripe";
  * UI/API は「課金未設定」として穏やかに縮退する。
  */
 
-export type PlanKey = "free" | "pro" | "max";
+export type PlanKey = "free" | "pro" | "max" | "team";
 
 export interface PlanDef {
   key: PlanKey;
@@ -16,8 +16,10 @@ export interface PlanDef {
   features: string[];
   /** 中央（センターステージ）に置く推し。3層GBBの中間を最有力にする。 */
   popular?: boolean;
+  /** individual=個人向け3層 / team=別セグメント（法人・チーム向け） */
+  segment?: "individual" | "team";
   /** Stripe の price ID を入れた環境変数名（free は課金なし） */
-  priceEnv?: "STRIPE_PRICE_PRO" | "STRIPE_PRICE_MAX";
+  priceEnv?: "STRIPE_PRICE_PRO" | "STRIPE_PRICE_MAX" | "STRIPE_PRICE_TEAM";
 }
 
 /**
@@ -51,6 +53,7 @@ export const PLANS: PlanDef[] = [
     key: "max",
     name: "Max",
     price: "¥2,980/月",
+    segment: "individual",
     features: [
       "アプリ無制限",
       "AI返信 無制限",
@@ -60,6 +63,20 @@ export const PLANS: PlanDef[] = [
       "優先処理",
     ],
     priceEnv: "STRIPE_PRICE_MAX",
+  },
+  // 別セグメント：個人向け3層とは分けて提示し、中間(Pro)のセンターステージを保つ。
+  {
+    key: "team",
+    name: "Team",
+    price: "¥5,800/月",
+    segment: "team",
+    features: [
+      "Maxの全機能",
+      "複数メンバーで共有",
+      "メンバー別の権限・履歴",
+      "まとめて請求",
+    ],
+    priceEnv: "STRIPE_PRICE_TEAM",
   },
 ];
 

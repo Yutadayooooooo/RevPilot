@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
   const { user, db } = auth;
 
   const { plan } = (await req.json()) as { plan?: PlanKey };
-  if (plan !== "pro" && plan !== "max") {
-    return NextResponse.json({ error: "plan は pro / max のいずれか" }, { status: 400 });
+  if (plan !== "pro" && plan !== "max" && plan !== "team") {
+    return NextResponse.json({ error: "plan は pro / max / team のいずれか" }, { status: 400 });
   }
 
   const priceId = priceIdForPlan(plan);
