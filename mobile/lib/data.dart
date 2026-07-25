@@ -272,20 +272,21 @@ extension ReviewSortLabel on ReviewSort {
 
 /// プラン別アプリ数上限（null=無制限）。lib/plan.ts と一致させる。
 int? planMaxApps(String plan) => switch (plan) {
-      'max' => null,
+      'max' || 'team' => null,
       'pro' => 5,
       _ => 1,
     };
 
 /// 一括返信の1回あたり上限（1=一括不可 / null=無制限）。lib/plan.ts と一致。
 int? planBulkLimit(String plan) => switch (plan) {
-      'max' => null,
+      'max' || 'team' => null,
       'pro' => 20,
       _ => 1,
     };
 
 String planLabel(String plan) =>
-    const {'free': 'Free', 'pro': 'Pro', 'max': 'Max'}[plan] ?? plan;
+    const {'free': 'Free', 'pro': 'Pro', 'max': 'Max', 'team': 'Team'}[plan] ??
+    plan;
 
 /// APIエラー（ユーザー向けメッセージを保持）。
 class ApiException implements Exception {

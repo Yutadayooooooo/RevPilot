@@ -37,8 +37,14 @@ class _PlanScreenState extends State<PlanScreen> {
 
   Future<void> _openExternal(String url) async {
     final uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      if (mounted) showSnack(context, 'ブラウザを開けませんでした', kind: SnackKind.error);
+    // アプリ内ブラウザ（iOS: SFSafariViewController / Android: Custom Tabs）で開き、
+    // 決済後もアプリに留まれるようにする。失敗時は外部ブラウザにフォールバック。
+    final ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+    if (!ok) {
+      final ext = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ext && mounted) {
+        showSnack(context, 'ブラウザを開けませんでした', kind: SnackKind.error);
+      }
     }
   }
 
@@ -118,6 +124,25 @@ class _PlanScreenState extends State<PlanScreen> {
                       '自動取得・週次サマリー・優先処理',
                     ],
                   ),
+                  const SizedBox(height: 24),
+                  // 別セグメント（チーム向け）。個人向け3層の意思決定を薄めないよう分離。
+                  Text('チーム向け',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: context.subtleC)),
+                  const SizedBox(height: 8),
+                  _planCard(
+                    plan: 'team',
+                    name: 'Team',
+                    price: '¥5,800 / 月',
+                    features: const [
+                      'Maxの全機能',
+                      '複数メンバーで共有',
+                      'メンバー別の権限・履歴',
+                      'まとめて請求',
+                    ],
+                  ),
                   if (isPaid) ...[
                     const SizedBox(height: 20),
                     OutlinedButton.icon(
@@ -132,14 +157,14 @@ class _PlanScreenState extends State<PlanScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
+                      color: context.subtleSurfaceC,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       '決済は安全なStripeのページ（外部ブラウザ）で行います。'
                       '購入後、プランの反映まで少し時間がかかる場合があります。',
                       style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                          TextStyle(fontSize: 12, color: context.subtleC),
                     ),
                   ),
                 ],
@@ -162,7 +187,7 @@ class _PlanScreenState extends State<PlanScreen> {
               decoration: BoxDecoration(
                 color: _plan != 'free'
                     ? AppTheme.primary.withValues(alpha: 0.12)
-                    : Colors.grey.shade200,
+                    : context.subtleSurfaceC,
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(planLabel(_plan),
@@ -170,7 +195,7 @@ class _PlanScreenState extends State<PlanScreen> {
                     fontWeight: FontWeight.w700,
                     color: _plan != 'free'
                         ? AppTheme.primary
-                        : Colors.grey.shade700,
+                        : context.subtleC,
                   )),
             ),
           ],
@@ -190,10 +215,10 @@ class _PlanScreenState extends State<PlanScreen> {
     // センターステージ：おすすめ(Pro)は枠を強調して視線を集める。
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: context.surfaceC,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: popular ? AppTheme.primary : AppTheme.border,
+          color: popular ? AppTheme.primary : context.borderC,
           width: popular ? 1.8 : 1,
         ),
       ),
