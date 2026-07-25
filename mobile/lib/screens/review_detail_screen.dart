@@ -22,6 +22,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
   late final TextEditingController _reply;
   bool _saving = false;
   bool _generating = false;
+  bool _posting = false;
 
   @override
   void initState() {
@@ -67,6 +68,27 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
       if (mounted) showSnack(context, '$e', kind: SnackKind.error);
     } finally {
       if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  Future<void> _postToStore() async {
+    if (_reply.text.trim().isEmpty) {
+      showSnack(context, '投稿する返信を入力してください', kind: SnackKind.error);
+      return;
+    }
+    HapticFeedback.lightImpact();
+    setState(() => _posting = true);
+    try {
+      await Repo.postReplyToStore(widget.review.id, text: _reply.text.trim());
+      HapticFeedback.mediumImpact();
+      if (mounted) {
+        showSnack(context, 'Google Playに投稿しました', kind: SnackKind.success);
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
+    } finally {
+      if (mounted) setState(() => _posting = false);
     }
   }
 
@@ -231,6 +253,29 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
               ),
             ],
           ).animate(delay: 240.ms).fadeIn(duration: 240.ms),
+          if (r.store == 'googleplay') ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _posting ? null : _postToStore,
+                icon: _posting
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.send_rounded, size: 18),
+                label: const Text('Google Playに投稿'),
+              ),
+            ).animate(delay: 300.ms).fadeIn(duration: 240.ms),
+          ] else ...[
+            const SizedBox(height: 10),
+            Text(
+              'App Storeは自動投稿に対応していないため、コピーしてApp Store Connectに貼り付けてください。',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            ),
+          ],
         ],
       ),
     );
