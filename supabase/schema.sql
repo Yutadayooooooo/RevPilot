@@ -82,6 +82,18 @@ create table if not exists review_topics (
   primary key (review_id, topic)
 );
 
+-- 運営からのお知らせ（障害/メンテ告知など）。全ユーザーに表示する。
+create table if not exists announcements (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  body text,
+  level text not null default 'info',          -- info | warning | critical
+  active boolean not null default true,
+  starts_at timestamptz,
+  ends_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 -- ポーリングのチェックポイント（Google Playの7日制限対策）
 create table if not exists poll_state (
   app_id uuid primary key references apps (id) on delete cascade,
@@ -116,6 +128,15 @@ create policy "own replies" on replies
       select 1 from reviews r join apps a on a.id = r.app_id
       where r.id = replies.review_id and a.owner = auth.uid()
     )
+  );
+
+-- お知らせ: 有効かつ期間内のものは全員が閲覧可。作成/更新はservice_role（管理者）のみ。
+alter table announcements enable row level security;
+create policy "read active announcements" on announcements
+  for select using (
+    active = true
+    and (starts_at is null or starts_at <= now())
+    and (ends_at is null or ends_at >= now())
   );
 
 -- 新規サインアップ時に profiles 行を自動作成（apps.owner のFK先を用意）

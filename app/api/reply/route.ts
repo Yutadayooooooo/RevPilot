@@ -3,8 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { draftReply } from "@/lib/ai";
 import { replyToGooglePlayReview } from "@/lib/googleplay";
+import { replyToAppStoreReview } from "@/lib/appstore";
 import { limitsForPlan, monthStartISO } from "@/lib/plan";
-import { loadCredentials, type GooglePlayCreds } from "@/lib/credentials";
+import { loadCredentials, type GooglePlayCreds, type AppStoreCreds } from "@/lib/credentials";
 
 export const dynamic = "force-dynamic";
 
@@ -76,12 +77,6 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "post") {
-    if (review.store !== "googleplay") {
-      return NextResponse.json(
-        { ok: false, error: "iOSは自動投稿不可。文面をコピーしてApp Store Connectに貼り付けてください。" },
-        { status: 422 }
-      );
-    }
     let body = text;
     if (!body) {
       // 本文が渡されていない＝ここでAI生成するので上限とAI設定をチェック
@@ -100,8 +95,31 @@ export async function POST(req: NextRequest) {
         app.reply_tone
       );
     }
-    const gpCreds = (await loadCredentials<GooglePlayCreds>(db, user.id, "googleplay")) ?? undefined;
-    await replyToGooglePlayReview(app.store_app_id, review.external_id, body, gpCreds);
+
+    try {
+      if (review.store === "googleplay") {
+        const gpCreds =
+          (await loadCredentials<GooglePlayCreds>(db, user.id, "googleplay")) ?? undefined;
+        await replyToGooglePlayReview(app.store_app_id, review.external_id, body, gpCreds);
+      } else {
+        // App Store: Customer Review Responses で投稿。失敗時はコピー運用へ誘導。
+        const ascCreds =
+          (await loadCredentials<AppStoreCreds>(db, user.id, "appstore")) ?? undefined;
+        await replyToAppStoreReview(review.external_id, body, ascCreds);
+      }
+    } catch (e: any) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            review.store === "appstore"
+              ? `App Storeへの自動投稿に失敗しました。文面をコピーしてApp Store Connectに貼り付けてください。（${String(e?.message ?? e)}）`
+              : String(e?.message ?? e),
+        },
+        { status: 502 }
+      );
+    }
+
     await db.from("replies").insert({
       review_id: reviewId,
       body,

@@ -47,6 +47,42 @@ async function ascGet(path: string, token: string): Promise<any> {
 }
 
 /**
+ * App Store のレビューへ返信を投稿する（Customer Review Responses）。
+ * @param reviewExternalId reviews.external_id（= ASCのcustomerReview id）
+ * 注意: Apple側の返信APIは信頼性に懸念があるとの報告があるため、
+ * 失敗時は呼び出し側でコピー運用へフォールバックできるよう例外を投げる。
+ */
+export async function replyToAppStoreReview(
+  reviewExternalId: string,
+  responseBody: string,
+  creds?: AppStoreCreds
+): Promise<void> {
+  const token = makeAscToken(creds);
+  const res = await fetch(`${BASE}/customerReviewResponses`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      data: {
+        type: "customerReviewResponses",
+        attributes: { responseBody },
+        relationships: {
+          review: { data: { type: "customerReviews", id: reviewExternalId } },
+        },
+      },
+    }),
+  });
+  if (res.status === 429) {
+    const retry = res.headers.get("Retry-After");
+    throw new Error(`ASC rate limited. Retry-After=${retry}`);
+  }
+  // 201 Created が成功。既に返信済みの場合などは 409。
+  if (!res.ok) throw new Error(`ASC ${res.status}: ${await res.text()}`);
+}
+
+/**
  * 指定アプリの最新レビューを取得（新しい順）。
  * @param appId Apple の numeric app id
  * @param stopAtExternalId ここまで来たら停止（前回チェックポイント）
