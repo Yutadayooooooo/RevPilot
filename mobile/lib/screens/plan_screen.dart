@@ -294,6 +294,16 @@ class _PlanScreenState extends State<PlanScreen> {
             : const Text('無料に戻す（解約手続き）'),
       );
     }
+    // 既に有料会員が別の有料プランへ変更する場合は、再Checkout（＝サブスク二重作成）を
+    // 避け、Stripeのポータルで差額精算つきの変更を行う。free会員のみ新規Checkout。
+    if (_plan != 'free') {
+      return OutlinedButton(
+        onPressed: _busy == null ? _manage : null,
+        child: _busy == 'portal'
+            ? const _MiniSpinner()
+            : Text('$nameに変更（管理画面）'),
+      );
+    }
     return FilledButton(
       onPressed: _busy == null ? () => _upgrade(plan) : null,
       child: _busy == plan
