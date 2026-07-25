@@ -3,7 +3,7 @@ import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { draftReply } from "@/lib/ai";
 import { replyToGooglePlayReview } from "@/lib/googleplay";
 import { replyToAppStoreReview } from "@/lib/appstore";
-import { limitsForPlan, monthStartISO } from "@/lib/plan";
+import { limitsForPlan, monthStartISO, aiQuotaReachedMessage } from "@/lib/plan";
 import {
   loadCredentials,
   type GooglePlayCreds,
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     remaining = Math.max(0, limits.aiRepliesPerMonth - (count ?? 0));
     if (remaining <= 0) {
       return NextResponse.json(
-        { error: "今月のAI返信の上限に達しました。プランのアップグレードで無制限になります。" },
+        { error: aiQuotaReachedMessage(profile?.plan, limits.aiRepliesPerMonth) },
         { status: 403 }
       );
     }

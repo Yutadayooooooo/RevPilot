@@ -4,7 +4,7 @@ import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { draftReply } from "@/lib/ai";
 import { replyToGooglePlayReview } from "@/lib/googleplay";
 import { replyToAppStoreReview } from "@/lib/appstore";
-import { limitsForPlan, monthStartISO } from "@/lib/plan";
+import { limitsForPlan, monthStartISO, aiQuotaReachedMessage } from "@/lib/plan";
 import { loadCredentials, type GooglePlayCreds, type AppStoreCreds } from "@/lib/credentials";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ async function aiQuotaError(db: SupabaseClient, userId: string): Promise<string 
     .eq("source", "ai")
     .gte("created_at", monthStartISO());
   if ((count ?? 0) >= limit) {
-    return `今月のAI返信の上限（${limit}件）に達しました。Proにアップグレードすると無制限に生成できます。`;
+    return aiQuotaReachedMessage(profile?.plan, limit);
   }
   return null;
 }
