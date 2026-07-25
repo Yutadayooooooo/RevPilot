@@ -89,8 +89,8 @@ class _PlanScreenState extends State<PlanScreen> {
                     features: const [
                       'アプリ 1件まで',
                       'AI返信 月10件まで',
-                      '手動更新のみ（自動取得なし）',
-                      '週次サマリーメールなし',
+                      '返信は1件ずつ（一括なし）',
+                      '手動更新のみ',
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -98,21 +98,24 @@ class _PlanScreenState extends State<PlanScreen> {
                     plan: 'pro',
                     name: 'Pro',
                     price: '¥1,480 / 月',
+                    popular: true,
                     features: const [
-                      'アプリ数 無制限',
+                      'アプリ 5件まで',
                       'AI返信 無制限',
-                      '自動取得（cron）',
-                      '週次サマリーメール',
+                      '一括返信 最大20件',
+                      '自動取得・週次サマリー',
                     ],
                   ),
                   const SizedBox(height: 12),
                   _planCard(
-                    plan: 'team',
-                    name: 'Team',
-                    price: '¥3,980 / 月',
+                    plan: 'max',
+                    name: 'Max',
+                    price: '¥2,980 / 月',
                     features: const [
-                      'Proの全機能',
-                      'チームでの利用に最適',
+                      'アプリ 無制限',
+                      'AI返信 無制限',
+                      '全レビュー 一括返信',
+                      '自動取得・週次サマリー・優先処理',
                     ],
                   ),
                   if (isPaid) ...[
@@ -181,9 +184,19 @@ class _PlanScreenState extends State<PlanScreen> {
     required String name,
     required String price,
     required List<String> features,
+    bool popular = false,
   }) {
     final isCurrent = _plan == plan;
-    return Card(
+    // センターステージ：おすすめ(Pro)は枠を強調して視線を集める。
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: popular ? AppTheme.primary : AppTheme.border,
+          width: popular ? 1.8 : 1,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -194,6 +207,22 @@ class _PlanScreenState extends State<PlanScreen> {
                 Text(name,
                     style: const TextStyle(
                         fontSize: 18, fontWeight: FontWeight.bold)),
+                if (popular) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Text('おすすめ',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ],
                 const Spacer(),
                 Text(price,
                     style: const TextStyle(
@@ -227,7 +256,7 @@ class _PlanScreenState extends State<PlanScreen> {
   /// プランごとのアクションボタン。
   /// - 現在プラン → 「利用中」
   /// - Free（有料からの移行）→ 解約導線（ポータル）
-  /// - Pro/Team → アップグレード
+  /// - Pro/Max → アップグレード
   Widget _planAction(String plan, String name, bool isCurrent) {
     if (isCurrent) {
       return OutlinedButton(onPressed: null, child: const Text('利用中'));

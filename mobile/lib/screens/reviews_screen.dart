@@ -8,6 +8,7 @@ import '../models.dart';
 import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
+import 'plan_screen.dart';
 import 'review_detail_screen.dart';
 
 class ReviewsScreen extends StatefulWidget {
@@ -27,6 +28,9 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   bool _unrepliedOnly = false;
   String? _appId;
   ReviewSort _sort = ReviewSort.newest;
+
+  String _plan = 'free';
+  bool _bulkRunning = false;
 
   int get _activeCount =>
       _ratings.length + (_unrepliedOnly ? 1 : 0) + (_appId != null ? 1 : 0);
@@ -57,6 +61,9 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
     Repo.announcements().then((a) {
       if (mounted) setState(() => _announcements = a);
     }).catchError((_) {});
+    Repo.plan().then((p) {
+      if (mounted) setState(() => _plan = p);
+    }).catchError((_) {});
   }
 
   Future<void> _refresh() async {
@@ -76,7 +83,21 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('レビュー')),
+      appBar: AppBar(
+        title: const Text('レビュー'),
+        actions: [
+          IconButton(
+            onPressed: _bulkRunning ? null : _bulkAction,
+            tooltip: '一括AI返信',
+            icon: _bulkRunning
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.auto_awesome_motion_outlined),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           if (_announcements.isNotEmpty) _announcementBanner(),
@@ -368,6 +389,118 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
       _appId = null;
       _reloadReviews();
     });
+  }
+
+  // ---- 一括AI返信（プラン別ゲート） ----
+  Future<void> _bulkAction() async {
+    HapticFeedback.selectionClick();
+    final limit = planBulkLimit(_plan); // 1=不可, null=無制限
+
+    // Free（一括不可）はアップセル
+    if (limit == 1) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('一括返信はProプランから'),
+          content: const Text(
+              'Proは最大20件、Maxは全レビューにまとめてAI返信を生成・投稿できます。'
+              'アップグレードしますか？'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('あとで')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('プランを見る')),
+          ],
+        ),
+      );
+      if (go == true && mounted) {
+        Navigator.of(context)
+            .push(MaterialPageRoute(builder: (_) => const PlanScreen()));
+      }
+      return;
+    }
+
+    // 現在の絞り込み結果のうち未返信を対象にする
+    final all = await _future;
+    final unreplied = all.where((r) => !r.hasReply).toList();
+    if (unreplied.isEmpty) {
+      if (mounted) showSnack(context, '未返信のレビューはありません');
+      return;
+    }
+    var targets = unreplied;
+    var capped = false;
+    if (limit != null && targets.length > limit) {
+      targets = targets.sublist(0, limit);
+      capped = true;
+    }
+
+    if (!mounted) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('未返信 ${targets.length} 件に一括AI返信',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Text(
+                capped
+                    ? '現在のプランでは一度に $limit 件まで。残りは繰り返し実行するか、Maxで全件一括に。'
+                    : 'AIが各レビューに合わせた返信を作成します。',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(ctx, 'post'),
+                icon: const Icon(Icons.send_rounded, size: 18),
+                label: const Text('生成してストアに投稿'),
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(ctx, 'draft'),
+                icon: const Icon(Icons.drafts_outlined, size: 18),
+                label: const Text('下書きだけ生成'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice == null) return;
+
+    setState(() => _bulkRunning = true);
+    try {
+      final res = await Repo.bulkReply(targets.map((r) => r.id).toList(),
+          post: choice == 'post');
+      final gen = (res['generated'] as num?)?.toInt() ?? 0;
+      final posted = (res['posted'] as num?)?.toInt() ?? 0;
+      HapticFeedback.mediumImpact();
+      if (mounted) {
+        showSnack(
+          context,
+          choice == 'post'
+              ? '生成 $gen 件・投稿 $posted 件が完了しました'
+              : '下書きを $gen 件生成しました',
+          kind: SnackKind.success,
+        );
+        setState(_reloadReviews);
+      }
+    } catch (e) {
+      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
+    } finally {
+      if (mounted) setState(() => _bulkRunning = false);
+    }
   }
 
   // ---- 絞り込みシート ----

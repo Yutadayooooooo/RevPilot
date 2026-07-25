@@ -163,7 +163,7 @@ class Repo {
     return reply is Map ? (reply['body'] as String? ?? '') : '';
   }
 
-  /// Google Playへ返信を投稿（API）。textを渡すとその本文を投稿する。
+  /// ストアへ返信を投稿（API）。textを渡すとその本文を投稿する。
   static Future<void> postReplyToStore(String reviewId, {String? text}) async {
     await _postApi('/api/reply', {
       'reviewId': reviewId,
@@ -171,6 +171,17 @@ class Repo {
       if (text != null && text.trim().isNotEmpty) 'text': text,
     });
   }
+
+  /// 複数レビューへ一括でAI返信を生成（post=trueで投稿まで）。
+  /// 返り値: { generated, posted, results:[{reviewId, ok, status?, error?}] }
+  static Future<Map<String, dynamic>> bulkReply(
+    List<String> reviewIds, {
+    bool post = false,
+  }) =>
+      _postApi('/api/reply/bulk', {
+        'reviewIds': reviewIds,
+        'action': post ? 'post' : 'draft',
+      });
 
   /// レビューへの返信ドラフトを保存（直接Supabase）。
   static Future<ReplyRow> saveManualReply(String reviewId, String body) async {
@@ -260,10 +271,21 @@ extension ReviewSortLabel on ReviewSort {
 }
 
 /// プラン別アプリ数上限（null=無制限）。lib/plan.ts と一致させる。
-int? planMaxApps(String plan) => (plan == 'pro' || plan == 'team') ? null : 1;
+int? planMaxApps(String plan) => switch (plan) {
+      'max' => null,
+      'pro' => 5,
+      _ => 1,
+    };
+
+/// 一括返信の1回あたり上限（1=一括不可 / null=無制限）。lib/plan.ts と一致。
+int? planBulkLimit(String plan) => switch (plan) {
+      'max' => null,
+      'pro' => 20,
+      _ => 1,
+    };
 
 String planLabel(String plan) =>
-    const {'free': 'Free', 'pro': 'Pro', 'team': 'Team'}[plan] ?? plan;
+    const {'free': 'Free', 'pro': 'Pro', 'max': 'Max'}[plan] ?? plan;
 
 /// APIエラー（ユーザー向けメッセージを保持）。
 class ApiException implements Exception {
