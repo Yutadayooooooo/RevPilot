@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServer, getCurrentUser } from "@/lib/supabase/server";
+import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { saveCredentials, connectedStores, type StoreCreds } from "@/lib/credentials";
 import { cryptoConfigured } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
 
-/** 連携済みストアの一覧を返す。 */
-export async function GET() {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const db = createSupabaseServer();
-  const stores = await connectedStores(db, user.id);
+/** 連携済みストアの一覧を返す（Web cookie / モバイル Bearer 両対応）。 */
+export async function GET(req: NextRequest) {
+  const auth = await resolveApiAuth(req);
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const stores = await connectedStores(auth.db, auth.user.id);
   return NextResponse.json({ connected: stores });
 }
 
@@ -26,8 +25,9 @@ export async function POST(req: NextRequest) {
       { status: 501 }
     );
   }
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const auth = await resolveApiAuth(req);
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { user, db } = auth;
 
   const body = await req.json();
   const store = body?.store;
@@ -54,7 +54,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "store は appstore / googleplay のいずれか" }, { status: 400 });
   }
 
-  const db = createSupabaseServer();
   try {
     await saveCredentials(db, user.id, store, creds);
   } catch (e: any) {

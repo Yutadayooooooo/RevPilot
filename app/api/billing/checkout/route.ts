@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServer, getCurrentUser } from "@/lib/supabase/server";
+import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { getStripe, priceIdForPlan, siteUrl, type PlanKey } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
 
 /**
  * サブスク購入用の Stripe Checkout セッションを作成し、リダイレクト先URLを返す。
- * body: { plan: "pro" | "team" }
+ * Web cookie / モバイル Bearer 両対応。body: { plan: "pro" | "team" }
  */
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
   if (!stripe) return NextResponse.json({ error: "課金は未設定です（STRIPE_SECRET_KEY）" }, { status: 501 });
 
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const auth = await resolveApiAuth(req);
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { user, db } = auth;
 
   const { plan } = (await req.json()) as { plan?: PlanKey };
   if (plan !== "pro" && plan !== "team") {
@@ -25,7 +26,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `${plan} の price ID が未設定です` }, { status: 501 });
   }
 
-  const db = createSupabaseServer();
   const { data: profile } = await db
     .from("profiles")
     .select("stripe_customer_id, email")

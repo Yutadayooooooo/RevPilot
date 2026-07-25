@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseServer, getCurrentUser } from "@/lib/supabase/server";
+import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { getStripe, siteUrl } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
 
 /**
  * Stripe カスタマーポータルのセッションを作成し、URLを返す。
+ * Web cookie / モバイル Bearer 両対応。
  * プラン変更・解約・支払い方法の管理をユーザー自身が行える。
  */
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
   if (!stripe) return NextResponse.json({ error: "課金は未設定です（STRIPE_SECRET_KEY）" }, { status: 501 });
 
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const auth = await resolveApiAuth(req);
+  if (!auth) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { user, db } = auth;
 
-  const db = createSupabaseServer();
   const { data: profile } = await db
     .from("profiles")
     .select("stripe_customer_id")
