@@ -42,6 +42,7 @@ if (!SECRET.startsWith("sk_test_")) {
 }
 
 const stripe = new Stripe(SECRET);
+const SITE = get("NEXT_PUBLIC_SITE_URL"); // ポータルの規約/プライバシーURLに使用（任意）
 
 // lib/stripe.ts と一致させる。JPY はゼロ小数通貨なので unit_amount は円そのまま。
 const PLANS = [
@@ -80,6 +81,45 @@ async function ensurePrice(product, plan) {
   });
 }
 
+/**
+ * カスタマーポータル設定を作成/更新（冪等）。
+ * 新規アカウントは既定のポータル設定が無く、billingPortal.sessions.create が
+ * エラーになるため、ここで明示的に構成を作る。プラン変更(price)・解約・
+ * 支払い方法更新・請求履歴を有効化し、既存サブスク会員はポータルで
+ * アップ/ダウングレードできる（＝再Checkoutによる二重課金を回避）。
+ */
+async function ensurePortalConfig(results) {
+  const params = {
+    metadata: { revpilot: "portal" },
+    business_profile: {
+      headline: "RevPilot のプランを管理",
+      ...(SITE
+        ? { privacy_policy_url: `${SITE}/privacy`, terms_of_service_url: `${SITE}/terms` }
+        : {}),
+    },
+    features: {
+      invoice_history: { enabled: true },
+      payment_method_update: { enabled: true },
+      customer_update: { enabled: true, allowed_updates: ["email"] },
+      subscription_cancel: { enabled: true, mode: "at_period_end" },
+      subscription_update: {
+        enabled: true,
+        default_allowed_updates: ["price"],
+        proration_behavior: "create_prorations",
+        products: results.map(({ product, price }) => ({
+          product: product.id,
+          prices: [price.id],
+        })),
+      },
+    },
+  };
+  const list = await stripe.billingPortal.configurations.list({ limit: 100 });
+  const existing = list.data.find((c) => c.metadata?.revpilot === "portal");
+  return existing
+    ? stripe.billingPortal.configurations.update(existing.id, params)
+    : stripe.billingPortal.configurations.create(params);
+}
+
 /** .env.local の KEY=... を置換、無ければ追記（他行は保持）。 */
 function upsertEnv(text, key, value) {
   const line = `${key}=${value}`;
@@ -100,14 +140,29 @@ for (const plan of PLANS) {
   );
 }
 
-// price ID を .env.local に反映（シークレットは触らない）
+// カスタマーポータル設定（失敗しても商品/価格の設定は無駄にしない）
+let portalId = "";
+try {
+  const portal = await ensurePortalConfig(results);
+  portalId = portal.id;
+  console.log(`  ✓ カスタマーポータル設定  ${portal.id}`);
+} catch (e) {
+  console.warn(
+    "  ! ポータル設定の作成に失敗:",
+    String(e?.message ?? e),
+    "\n    → Stripeダッシュボード > 設定 > Billing > カスタマーポータル を一度保存すれば有効化できます。"
+  );
+}
+
+// price ID / ポータルID を .env.local に反映（シークレットは触らない）
 let next = envText;
 for (const { plan, price } of results) {
   next = upsertEnv(next, plan.env, price.id);
 }
+if (portalId) next = upsertEnv(next, "STRIPE_PORTAL_CONFIGURATION_ID", portalId);
 if (next !== envText) {
   writeFileSync(ENV_PATH, next);
-  console.log("\n✓ .env.local に STRIPE_PRICE_PRO / MAX / TEAM を書き込みました。");
+  console.log("\n✓ .env.local に STRIPE_PRICE_PRO / MAX / TEAM（＋ポータルID）を書き込みました。");
 } else {
   console.log("\n= .env.local は既に最新でした（変更なし）。");
 }

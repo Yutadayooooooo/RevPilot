@@ -28,9 +28,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Stripe 顧客が未作成です（先にプランを購入してください）" }, { status: 400 });
   }
 
+  // 明示的な構成があれば使う（新規アカウントで既定構成が無い場合の対策）。
+  const configuration = process.env.STRIPE_PORTAL_CONFIGURATION_ID || undefined;
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
     return_url: `${siteUrl(req)}/settings`,
+    ...(configuration ? { configuration } : {}),
   });
 
   return NextResponse.json({ url: session.url });
