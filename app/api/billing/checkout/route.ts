@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { getStripe, priceIdForPlan, siteUrl, type PlanKey } from "@/lib/stripe";
 
@@ -56,7 +57,11 @@ export async function POST(req: NextRequest) {
     subscription_data: { metadata: { userId: user.id } },
     success_url: `${base}/settings?billing=success`,
     cancel_url: `${base}/settings?billing=cancel`,
-  });
+    // 新規アカウントで既定ONの Managed Payments（Stripeが販売者=MoRとなり税を代行）を
+    // 無効化。本アプリは自身が販売者で、サブスク状態はWebhookで管理する従来構成のため。
+    // Stripeに税/MoRを任せる方針にする場合は、この行を外して各商品に tax_code を設定する。
+    managed_payments: { enabled: false },
+  } as Stripe.Checkout.SessionCreateParams);
 
   return NextResponse.json({ url: session.url });
 }
