@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -54,10 +56,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               ]);
             }
             var i = 0;
-            Widget staggered(Widget child) => child
-                .animate(delay: (80 * i++).ms)
-                .fadeIn(duration: 300.ms)
-                .slideY(begin: 0.06, end: 0, curve: Curves.easeOut);
+            Widget staggered(Widget child) =>
+                child.animate(delay: (80 * i++).ms).fadeIn(duration: 300.ms);
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -145,20 +145,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       child: Text('★$star',
                           style: const TextStyle(fontSize: 12))),
                   Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: TweenAnimationBuilder<double>(
-                        tween: Tween(
-                            begin: 0, end: (counts[star] ?? 0) / maxCount),
-                        duration: const Duration(milliseconds: 800),
-                        curve: Curves.easeOutCubic,
-                        builder: (_, v, __) => LinearProgressIndicator(
-                          value: v,
-                          minHeight: 10,
-                          backgroundColor: const Color(0xFFEEF2F7),
-                          color: AppTheme.ratingColor(star),
-                        ),
-                      ),
+                    child: _GrowBar(
+                      value: (counts[star] ?? 0) / maxCount,
+                      color: AppTheme.ratingColor(star),
+                      delay: Duration(milliseconds: 150 + (5 - star) * 90),
                     ),
                   ),
                   SizedBox(
@@ -228,6 +218,64 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 星分布バー。表示後に少し遅れて0→目標値へ伸びる（カスケード）。
+/// 単一の短命コントローラのみ・静止後は再描画しないため軽量。
+class _GrowBar extends StatefulWidget {
+  final double value;
+  final Color color;
+  final Duration delay;
+  const _GrowBar({
+    required this.value,
+    required this.color,
+    this.delay = Duration.zero,
+  });
+
+  @override
+  State<_GrowBar> createState() => _GrowBarState();
+}
+
+class _GrowBarState extends State<_GrowBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 650),
+  );
+  late final Animation<double> _a =
+      CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(widget.delay, () {
+      if (mounted) _c.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(4),
+      child: AnimatedBuilder(
+        animation: _a,
+        builder: (_, __) => LinearProgressIndicator(
+          value: _a.value * widget.value,
+          minHeight: 10,
+          backgroundColor: const Color(0xFFEEF2F7),
+          color: widget.color,
         ),
       ),
     );

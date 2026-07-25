@@ -123,58 +123,165 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   }
 
   Widget _filters() {
+    var appLabel = '全アプリ';
+    if (_appFilter != null) {
+      for (final a in _apps) {
+        if (a.id == _appFilter) {
+          appLabel = a.name;
+          break;
+        }
+      }
+    }
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            FilterChip(
-              label: const Text('未返信のみ'),
+            _pill(
+              label: '未返信のみ',
               selected: _unrepliedOnly,
-              onSelected: (v) {
+              onTap: () {
                 HapticFeedback.selectionClick();
                 setState(() {
-                  _unrepliedOnly = v;
+                  _unrepliedOnly = !_unrepliedOnly;
                   _load();
                 });
               },
             ),
-            const SizedBox(width: 8),
-            for (final r in [5, 4, 3, 2, 1]) ...[
-              FilterChip(
-                label: Text('★$r'),
+            for (final r in [5, 4, 3, 2, 1])
+              _pill(
+                label: '★$r',
                 selected: _ratingFilter == r,
-                onSelected: (v) {
+                onTap: () {
                   HapticFeedback.selectionClick();
                   setState(() {
-                    _ratingFilter = v ? r : null;
+                    _ratingFilter = _ratingFilter == r ? null : r;
                     _load();
                   });
                 },
               ),
-              const SizedBox(width: 8),
-            ],
             if (_apps.isNotEmpty)
-              DropdownButtonHideUnderline(
-                child: DropdownButton<String?>(
-                  value: _appFilter,
-                  hint: const Text('全アプリ'),
-                  borderRadius: BorderRadius.circular(12),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('全アプリ')),
-                    for (final a in _apps)
-                      DropdownMenuItem(value: a.id, child: Text(a.name)),
-                  ],
-                  onChanged: (v) => setState(() {
-                    _appFilter = v;
-                    _load();
-                  }),
-                ),
+              _pill(
+                label: appLabel,
+                selected: _appFilter != null,
+                onTap: _pickApp,
+                trailing: Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: _appFilter != null ? Colors.white : AppTheme.ink),
               ),
           ],
         ),
       ),
+    );
+  }
+
+  /// 絞り込みピル（選択＝インディゴ塗り＋白文字ではっきり視認）。
+  Widget _pill({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    Widget? trailing,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: selected ? AppTheme.primary : Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected ? AppTheme.primary : AppTheme.border,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? Colors.white : AppTheme.ink,
+                ),
+              ),
+              if (trailing != null) ...[const SizedBox(width: 2), trailing],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// アプリ絞り込みをボトムシートで選ばせる（モバイル定番のUI）。
+  Future<void> _pickApp() async {
+    HapticFeedback.selectionClick();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.border,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('アプリで絞り込み',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+              ),
+              _appTile(ctx, null, '全アプリ', Icons.apps),
+              for (final a in _apps)
+                _appTile(ctx, a.id, a.name,
+                    a.store == 'appstore' ? Icons.apple : Icons.android),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _appTile(BuildContext ctx, String? id, String name, IconData icon) {
+    final selected = _appFilter == id;
+    return ListTile(
+      leading: Icon(icon,
+          color: selected ? AppTheme.primary : Colors.grey.shade700),
+      title: Text(name,
+          style: TextStyle(
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? AppTheme.primary : AppTheme.ink,
+          )),
+      trailing:
+          selected ? const Icon(Icons.check_rounded, color: AppTheme.primary) : null,
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() {
+          _appFilter = id;
+          _load();
+        });
+        Navigator.pop(ctx);
+      },
     );
   }
 }

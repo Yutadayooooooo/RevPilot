@@ -16,6 +16,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
 
+  /// 一度でも開いたタブだけ実体を生成する（＝初回表示時に入場アニメが再生され、
+  /// 以降はマウントし続けて再読み込みを避ける）。
+  final Set<int> _visited = {0};
+
   final _screens = const [
     ReviewsScreen(),
     AnalyticsScreen(),
@@ -24,13 +28,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final children = [
+      for (var i = 0; i < _screens.length; i++)
+        _visited.contains(i) ? _screens[i] : const SizedBox.shrink(),
+    ];
     return Scaffold(
-      body: IndexedStack(index: _index, children: _screens),
+      body: _FadeIndexedStack(index: _index, children: children),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {
           if (i != _index) HapticFeedback.selectionClick();
-          setState(() => _index = i);
+          setState(() {
+            _index = i;
+            _visited.add(i);
+          });
         },
         destinations: const [
           NavigationDestination(
@@ -47,6 +58,49 @@ class _HomeScreenState extends State<HomeScreen> {
               label: '設定'),
         ],
       ),
+    );
+  }
+}
+
+/// タブ切替時に新しい画面をフェードインさせる IndexedStack。
+/// 全タブを常時マウントしたまま（＝再読み込みなし）でフェードのみ行うため軽量。
+/// 静止時は opacity=1 で合成レイヤも発生しない。
+class _FadeIndexedStack extends StatefulWidget {
+  final int index;
+  final List<Widget> children;
+  const _FadeIndexedStack({required this.index, required this.children});
+
+  @override
+  State<_FadeIndexedStack> createState() => _FadeIndexedStackState();
+}
+
+class _FadeIndexedStackState extends State<_FadeIndexedStack>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 220),
+    value: 1,
+  );
+  late final Animation<double> _fade =
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+
+  @override
+  void didUpdateWidget(_FadeIndexedStack old) {
+    super.didUpdateWidget(old);
+    if (old.index != widget.index) _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: IndexedStack(index: widget.index, children: widget.children),
     );
   }
 }
