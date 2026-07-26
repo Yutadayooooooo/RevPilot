@@ -32,4 +32,19 @@ print(ios[0]["id"] if ios else "")
   fi
 fi
 
+# 開発サーバーのURLを現在のLAN IPへ自動更新（DHCPでIPが変わっても実機から到達可能に）。
+IP=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
+if [[ -n "$IP" ]]; then
+  python3 - "$IP" <<'PY'
+import json, sys
+p = "config/app_config.json"
+d = json.load(open(p))
+url = f"http://{sys.argv[1]}:3000"
+if d.get("API_BASE_URL") != url:
+    d["API_BASE_URL"] = url
+    json.dump(d, open(p, "w"), ensure_ascii=False, indent=2)
+    print(f"▶ API_BASE_URL を {url} に更新しました")
+PY
+fi
+
 exec flutter run --device-timeout "$TIMEOUT" --dart-define-from-file=config/app_config.json "$@"
