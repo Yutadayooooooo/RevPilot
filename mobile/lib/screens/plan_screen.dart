@@ -113,11 +113,13 @@ class _PlanScreenState extends State<PlanScreen> {
     }
   }
 
-  Future<void> _manage() async {
+  /// ポータル（解約・変更・支払い方法）。busyId でボタンごとにスピナーを分ける。
+  Future<void> _manage({String busyId = 'portal'}) async {
     HapticFeedback.lightImpact();
-    setState(() => _busy = 'portal');
+    setState(() => _busy = busyId);
     try {
       final url = await Repo.billingPortalUrl();
+      if (mounted) setState(() => _busy = null); // ブラウザを開く前に解除（回りっぱなし防止）
       await _openExternal(url);
     } catch (e) {
       if (mounted) showSnack(context, '$e', kind: SnackKind.error);
@@ -199,7 +201,7 @@ class _PlanScreenState extends State<PlanScreen> {
                   if (isPaid) ...[
                     const SizedBox(height: 20),
                     OutlinedButton.icon(
-                      onPressed: _busy == null ? _manage : null,
+                      onPressed: _busy == null ? () => _manage() : null,
                       icon: _busy == 'portal'
                           ? const _MiniSpinner()
                           : const Icon(Icons.settings_outlined, size: 18),
@@ -372,31 +374,43 @@ class _PlanScreenState extends State<PlanScreen> {
     if (isCurrent) {
       return OutlinedButton(onPressed: null, child: const Text('利用中'));
     }
+
+    final useIap = Platform.isIOS && _iapReady;
+
+    // Freeカード（有料からの移行）＝解約導線。ボタン固有のbusyId。
     if (plan == 'free') {
       return OutlinedButton(
-        onPressed: _busy == null ? _manage : null,
-        child: _busy == 'portal'
+        onPressed: _busy == null ? () => _manage(busyId: 'free') : null,
+        child: _busy == 'free'
             ? const _MiniSpinner()
             : const Text('無料に戻す（解約手続き）'),
       );
     }
-    // 既に有料会員が別の有料プランへ変更する場合は、再Checkout（＝サブスク二重作成）を
-    // 避け、Stripeのポータルで差額精算つきの変更を行う。free会員のみ新規Checkout。
+
+    // iOSでIAPが有効なら、新規購入もプラン変更もStoreKit（ネイティブ購入シート）で。
+    // 同一サブスクグループ内なのでアップ/ダウングレードもStoreKitが処理する。
+    if (useIap) {
+      return FilledButton(
+        onPressed: _busy == null ? () => _buyIap(plan) : null,
+        child: _busy == plan
+            ? const _MiniSpinner()
+            : Text(_plan == 'free' ? '$nameにアップグレード' : '$nameに変更'),
+      );
+    }
+
+    // 以下は非IAP（Android/Web/フォールバック）。
+    // 既に有料会員なら再Checkout（＝二重課金）を避け、ポータルで変更（ボタン固有busyId）。
     if (_plan != 'free') {
       return OutlinedButton(
-        onPressed: _busy == null ? _manage : null,
-        child: _busy == 'portal'
+        onPressed: _busy == null ? () => _manage(busyId: plan) : null,
+        child: _busy == plan
             ? const _MiniSpinner()
             : Text('$nameに変更（管理画面）'),
       );
     }
-    // iOSでStoreKit（IAP）が使える状態なら、ネイティブ購入シートで購入。
-    // まだStoreKit設定が無い等で商品未取得なら、従来のStripe Checkoutにフォールバック。
-    final useIap = Platform.isIOS && _iapReady;
+    // free会員 → 新規Checkout。
     return FilledButton(
-      onPressed: _busy == null
-          ? () => useIap ? _buyIap(plan) : _upgrade(plan)
-          : null,
+      onPressed: _busy == null ? () => _upgrade(plan) : null,
       child: _busy == plan
           ? const _MiniSpinner()
           : Text('$nameにアップグレード'),
