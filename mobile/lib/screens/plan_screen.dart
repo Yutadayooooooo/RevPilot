@@ -101,6 +101,10 @@ class _PlanScreenState extends State<PlanScreen> {
     setState(() => _busy = plan);
     try {
       final url = await Repo.checkoutUrl(plan);
+      // URL取得が完了したらスピナーを解除する。この後アプリ内ブラウザを前面に出すが、
+      // inAppBrowserView は閉じ方によって launchUrl が解決しないことがあり、
+      // ここで解除しないとカードが回りっぱなしになるため。
+      if (mounted) setState(() => _busy = null);
       await _openExternal(url);
     } catch (e) {
       if (mounted) showSnack(context, '$e', kind: SnackKind.error);
@@ -135,6 +139,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   _current(),
+                  if (Platform.isIOS) _iapStatus(),
                   const SizedBox(height: 20),
                   _planCard(
                     plan: 'free',
@@ -218,6 +223,39 @@ class _PlanScreenState extends State<PlanScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  /// iOSでのIAPの状態表示（開発時の切り分け用）。取得できていればネイティブ購入、
+  /// 取れていなければStripeにフォールバックしている旨を明示する。
+  Widget _iapStatus() {
+    final ok = _iapReady;
+    final color = ok ? AppTheme.success : AppTheme.warning;
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(ok ? Icons.check_circle_outline : Icons.info_outline,
+              size: 16, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              ok
+                  ? 'アプリ内課金(IAP)が有効です。購入はネイティブ画面で行われます。'
+                  : 'IAP商品を取得できていません→Stripe決済にフォールバック中。'
+                      'IAPのテストはXcodeの▶から起動してください（run.shでは反映されません）。',
+              style: TextStyle(fontSize: 11, color: context.inkC, height: 1.4),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
