@@ -21,14 +21,23 @@ class Repo {
     }
     final token = _db.auth.currentSession?.accessToken;
     if (token == null) throw const ApiException('ログインが必要です。');
-    final res = await http.post(
-      Uri.parse('${AppConfig.apiBaseUrl}$path'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(body),
-    );
+    final http.Response res;
+    try {
+      res = await http
+          .post(
+            Uri.parse('${AppConfig.apiBaseUrl}$path'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (_) {
+      // 接続失敗/タイムアウトは生の ClientException を出さず、原因が分かる文言に。
+      throw ApiException(
+          'サーバーに接続できませんでした。開発サーバーの起動と接続先(${AppConfig.apiBaseUrl})を確認してください。');
+    }
     Map<String, dynamic> json = {};
     try {
       json = jsonDecode(res.body) as Map<String, dynamic>;
