@@ -3,9 +3,25 @@ import 'dart:io';
 
 import 'package:in_app_purchase/in_app_purchase.dart';
 
+/// 購入/復元の成立結果。サーバー検証(/api/billing/iap/apple)に渡す材料を持つ。
+class IapResult {
+  final String planKey;
+  final String productId;
+  final String? transactionId;
+  final String? verificationData; // serverVerificationData（本番検証で使用）
+  final bool restored; // 復元由来か（新規購入=false）
+  const IapResult({
+    required this.planKey,
+    required this.productId,
+    this.transactionId,
+    this.verificationData,
+    this.restored = false,
+  });
+}
+
 /// App内課金（IAP）。当面は Xcode の StoreKit ローカルテスト用（Apple Developer登録なしで
-/// ネイティブ購入シートを動作確認できる）。本番の“安全な購入確定”はサーバー側レシート検証
-/// （RevenueCat等）が必要で、Apple Developer登録後に対応する。
+/// ネイティブ購入シートを動作確認できる）。購入の確定はサーバー側検証（/api/billing/iap/apple）
+/// に委ね、そこで profiles.plan を更新する。本番の厳密な検証は Apple Developer 登録後に有効化。
 class IapService {
   /// プラン → ストアの商品ID。StoreKit設定ファイル(ios/Runner/RevPilot.storekit)と一致させる。
   static const Map<String, String> productIds = {
@@ -25,9 +41,9 @@ class IapService {
   bool get isReady => _products.isNotEmpty;
 
   /// 初期化。商品を取得し購入ストリームを購読する。
-  /// onPurchased: 購入/復元が成立したプランキー。onError: 失敗時の文言。
+  /// onPurchased: 購入/復元が成立したときの結果（サーバー検証に渡す）。onError: 失敗時の文言。
   Future<void> init({
-    required void Function(String planKey) onPurchased,
+    required void Function(IapResult result) onPurchased,
     required void Function(String message) onError,
   }) async {
     if (!platformSupported) return;
@@ -44,7 +60,18 @@ class IapService {
           case PurchaseStatus.purchased:
           case PurchaseStatus.restored:
             final key = _planForProduct(pd.productID);
-            if (key != null) onPurchased(key);
+            if (key != null) {
+              onPurchased(IapResult(
+                planKey: key,
+                productId: pd.productID,
+                transactionId: pd.purchaseID,
+                verificationData:
+                    pd.verificationData.serverVerificationData.isEmpty
+                        ? null
+                        : pd.verificationData.serverVerificationData,
+                restored: pd.status == PurchaseStatus.restored,
+              ));
+            }
             break;
           case PurchaseStatus.error:
             onError(pd.error?.message ?? '購入に失敗しました');
@@ -59,6 +86,13 @@ class IapService {
         }
       }
     });
+  }
+
+  /// 過去の購入を復元する。結果は init の onPurchased（restored=true）に届く。
+  /// Appleの審査要件（購入の復元手段の提供）を満たすために必要。
+  Future<void> restore() async {
+    if (!platformSupported) return;
+    await _iap.restorePurchases();
   }
 
   String? _planForProduct(String productId) {

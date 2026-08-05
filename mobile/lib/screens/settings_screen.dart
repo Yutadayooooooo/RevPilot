@@ -23,6 +23,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late Future<_SettingsData> _future;
   bool _refreshing = false;
+  bool _deleting = false;
 
   @override
   void initState() {
@@ -96,6 +97,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (ok == true) {
       HapticFeedback.mediumImpact();
       await Supabase.instance.client.auth.signOut();
+    }
+  }
+
+  /// アカウントの完全削除（退会）。App Store ガイドライン 5.1.1(v) の必須要件。
+  Future<void> _deleteAccount() async {
+    if (_deleting) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('アカウントを削除'),
+        content: const Text(
+          'アカウントと、連携アプリ・取得したレビュー・返信・ストア連携などの'
+          'すべてのデータが完全に削除されます。この操作は取り消せません。\n\n'
+          '有効なサブスクリプションがある場合は解約されます。',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('キャンセル')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('削除する'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _deleting = true);
+    try {
+      await Repo.deleteAccount();
+      HapticFeedback.heavyImpact();
+      // 削除済みユーザーはサーバーサインアウトが失敗し得るためローカルで確実にセッション破棄。
+      await Supabase.instance.client.auth.signOut(scope: SignOutScope.local);
+      // 以降は認証状態の変化でログイン画面へ遷移する。
+    } catch (e) {
+      if (mounted) {
+        setState(() => _deleting = false);
+        showSnack(context, '$e', kind: SnackKind.error);
+      }
     }
   }
 
@@ -218,12 +260,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 28),
 
               OutlinedButton.icon(
-                onPressed: _signOut,
+                onPressed: _deleting ? null : _signOut,
                 icon: const Icon(Icons.logout, size: 18),
                 label: const Text('ログアウト'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.danger,
                   minimumSize: const Size.fromHeight(48),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // アカウント削除（退会）。Apple審査で必須の導線。
+              TextButton.icon(
+                onPressed: _deleting ? null : _deleteAccount,
+                icon: _deleting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.delete_forever_outlined, size: 18),
+                label: Text(_deleting ? '削除しています…' : 'アカウントを削除'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.danger,
+                  minimumSize: const Size.fromHeight(44),
                 ),
               ),
             ],

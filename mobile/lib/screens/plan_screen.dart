@@ -42,13 +42,30 @@ class _PlanScreenState extends State<PlanScreen> {
   Future<void> _initIap() async {
     if (!IapService.platformSupported) return;
     await _iap.init(
-      onPurchased: (planKey) {
-        if (!mounted) return;
-        setState(() => _busy = null);
-        // ローカルテストでは購入は擬似成立。本番のプラン確定はサーバー検証実装後。
-        showSnack(context,
-            '購入が完了しました（テスト）。本番反映はサーバー検証の実装後に有効になります。',
-            kind: SnackKind.success);
+      onPurchased: (result) async {
+        // 購入/復元が成立→サーバーで確定し、profiles.plan を反映する。
+        try {
+          final plan = await Repo.confirmApplePurchase(
+            productId: result.productId,
+            transactionId: result.transactionId,
+            verificationData: result.verificationData,
+          );
+          if (!mounted) return;
+          setState(() {
+            _busy = null;
+            _plan = plan;
+          });
+          showSnack(
+            context,
+            result.restored ? '購入を復元しました。' : '${planLabel(plan)}にアップグレードしました。',
+            kind: SnackKind.success,
+          );
+        } catch (e) {
+          if (!mounted) return;
+          setState(() => _busy = null);
+          // 購入自体は成立しているが、サーバー確定に失敗（例: 検証未設定）。
+          showSnack(context, 'プラン反映に失敗しました：$e', kind: SnackKind.error);
+        }
       },
       onError: (message) {
         if (!mounted) return;
@@ -57,6 +74,20 @@ class _PlanScreenState extends State<PlanScreen> {
       },
     );
     if (mounted) setState(() => _iapReady = _iap.isReady);
+  }
+
+  /// 過去の購入を復元（Apple審査要件）。結果は _initIap のコールバックで反映。
+  Future<void> _restore() async {
+    HapticFeedback.lightImpact();
+    setState(() => _busy = 'restore');
+    try {
+      await _iap.restore();
+    } catch (e) {
+      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
+    } finally {
+      // 復元は購入が無くても onPurchased が呼ばれないことがあるため、ここで必ず解除。
+      if (mounted) setState(() => _busy = null);
+    }
   }
 
   Future<void> _load() async {
@@ -208,6 +239,17 @@ class _PlanScreenState extends State<PlanScreen> {
                       label: const Text('プランを管理・解約'),
                     ),
                   ],
+                  // 購入の復元（Apple審査要件）。IAPが使えるときだけ表示。
+                  if (Platform.isIOS && _iapReady) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: _busy == null ? _restore : null,
+                      icon: _busy == 'restore'
+                          ? const _MiniSpinner()
+                          : const Icon(Icons.restore, size: 18),
+                      label: const Text('購入を復元'),
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -216,10 +258,15 @@ class _PlanScreenState extends State<PlanScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '決済は安全なStripeのページ（外部ブラウザ）で行います。'
-                      '購入後、プランの反映まで少し時間がかかる場合があります。',
+                      Platform.isIOS && _iapReady
+                          ? 'サブスクは選択した期間（月額）で、Apple IDに購入時に課金されます。'
+                              '解約しない限り期間終了時に自動更新され、更新料は期間終了の24時間前までに請求されます。'
+                              '自動更新は購入後にiPhoneの「設定 > Apple ID > サブスクリプション」からいつでも解約できます。'
+                              '詳細は利用規約・プライバシーポリシーをご確認ください。'
+                          : '決済は安全なStripeのページ（外部ブラウザ）で行います。'
+                              '購入後、プランの反映まで少し時間がかかる場合があります。',
                       style:
-                          TextStyle(fontSize: 12, color: context.subtleC),
+                          TextStyle(fontSize: 12, color: context.subtleC, height: 1.5),
                     ),
                   ),
                 ],

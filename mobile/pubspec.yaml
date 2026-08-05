@@ -1,5 +1,5 @@
 name: revpilot_mobile
-description: "A new Flutter project."
+description: "RevPilot — アプリレビューの監視・AI返信・分析（モバイル）。"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
