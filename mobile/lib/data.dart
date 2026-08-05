@@ -257,6 +257,53 @@ class Repo {
     return url;
   }
 
+  /// iOSのIAP購入/復元をサーバーで確定し、profiles.plan に反映する。
+  /// 返り値は反映後のプランキー（'pro' 等）。
+  static Future<String> confirmApplePurchase({
+    required String productId,
+    String? transactionId,
+    String? verificationData,
+  }) async {
+    final json = await _postApi('/api/billing/iap/apple', {
+      'productId': productId,
+      if (transactionId != null) 'transactionId': transactionId,
+      if (verificationData != null) 'verificationData': verificationData,
+    });
+    return (json['plan'] as String?) ?? 'free';
+  }
+
+  // ---- アカウント削除（退会 / Apple審査要件） ----
+  /// アカウントと関連データを完全に削除する。成功後はサインアウトすること。
+  static Future<void> deleteAccount() async {
+    if (!AppConfig.hasApi) {
+      throw const ApiException('この機能はサーバー接続が必要です。');
+    }
+    final token = _db.auth.currentSession?.accessToken;
+    if (token == null) throw const ApiException('ログインが必要です。');
+    final http.Response res;
+    try {
+      res = await http
+          .delete(
+            Uri.parse('${AppConfig.apiBaseUrl}/api/account'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
+    } catch (_) {
+      throw ApiException(
+          'サーバーに接続できませんでした。接続先(${AppConfig.apiBaseUrl})を確認してください。');
+    }
+    if (res.statusCode >= 200 && res.statusCode < 300) return;
+    Map<String, dynamic> json = {};
+    try {
+      json = jsonDecode(res.body) as Map<String, dynamic>;
+    } catch (_) {}
+    throw ApiException(
+        (json['error'] as String?) ?? 'アカウント削除に失敗しました (${res.statusCode})');
+  }
+
   // ---- プラン ----
   static Future<String> plan() async {
     final uid = _db.auth.currentUser?.id;
