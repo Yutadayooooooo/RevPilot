@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../notifications.dart';
 import 'reviews_screen.dart';
+import 'notifications_screen.dart';
 import 'analytics_screen.dart';
 import 'settings_screen.dart';
 
-/// ボトムナビ：レビュー / 分析 / 設定。
+/// ボトムナビ：レビュー / 通知 / 分析 / 設定。
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -13,18 +15,67 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _index = 0;
+  int _unread = 0; // 通知タブの未読バッジ
 
   /// 一度でも開いたタブだけ実体を生成する（＝初回表示時に入場アニメが再生され、
   /// 以降はマウントし続けて再読み込みを避ける）。
   final Set<int> _visited = {0};
 
+  static const _notifIndex = 1;
+
   final _screens = const [
     ReviewsScreen(),
+    NotificationsScreen(),
     AnalyticsScreen(),
     SettingsScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshUnread();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 復帰時にバッジを更新（バックグラウンド中に新着があるかもしれない）。
+    if (state == AppLifecycleState.resumed && _index != _notifIndex) {
+      _refreshUnread();
+    }
+  }
+
+  Future<void> _refreshUnread() async {
+    final n = await NotifStore.unreadCount();
+    if (mounted) setState(() => _unread = n);
+  }
+
+  Future<void> _onSelect(int i) async {
+    if (i != _index) HapticFeedback.selectionClick();
+    setState(() {
+      _index = i;
+      _visited.add(i);
+    });
+    if (i == _notifIndex) {
+      // 通知タブを開いたら既読化してバッジを消す。
+      await NotifStore.markSeenNow();
+      if (mounted) setState(() => _unread = 0);
+    } else {
+      // 他タブへ移ったタイミングでバッジを取り直す。
+      _refreshUnread();
+    }
+  }
+
+  Widget _notifIcon(Widget icon) =>
+      _unread > 0 ? Badge(label: Text('$_unread'), child: icon) : icon;
 
   @override
   Widget build(BuildContext context) {
@@ -36,23 +87,21 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _FadeIndexedStack(index: _index, children: children),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) {
-          if (i != _index) HapticFeedback.selectionClick();
-          setState(() {
-            _index = i;
-            _visited.add(i);
-          });
-        },
-        destinations: const [
-          NavigationDestination(
+        onDestinationSelected: _onSelect,
+        destinations: [
+          const NavigationDestination(
               icon: Icon(Icons.rate_review_outlined),
               selectedIcon: Icon(Icons.rate_review),
               label: 'レビュー'),
           NavigationDestination(
+              icon: _notifIcon(const Icon(Icons.notifications_outlined)),
+              selectedIcon: _notifIcon(const Icon(Icons.notifications)),
+              label: '通知'),
+          const NavigationDestination(
               icon: Icon(Icons.insights_outlined),
               selectedIcon: Icon(Icons.insights),
               label: '分析'),
-          NavigationDestination(
+          const NavigationDestination(
               icon: Icon(Icons.settings_outlined),
               selectedIcon: Icon(Icons.settings),
               label: '設定'),

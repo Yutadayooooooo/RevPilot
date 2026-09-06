@@ -41,6 +41,8 @@ dependencies:
   url_launcher: ^6.3.2
   # iOS/AndroidのApp内課金（当面はStoreKitローカルテスト用。本番はRevenueCat等へ）
   in_app_purchase: ^3.2.0
+  # アプリ内通知の既読位置（最終閲覧時刻）をローカル保存
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:
