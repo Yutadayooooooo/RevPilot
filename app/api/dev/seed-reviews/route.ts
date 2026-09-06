@@ -40,14 +40,20 @@ export async function POST(req: NextRequest) {
 
   // メール → ユーザーID（auth.users を正とする。profiles.email 未設定でも解決できる）。
   let owner: string | null = null;
-  for (let page = 1; page <= 5 && !owner; page++) {
+  const allEmails: string[] = [];
+  for (let page = 1; page <= 10 && !owner; page++) {
     const { data, error } = await db.auth.admin.listUsers({ page, perPage: 200 });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    for (const u of data.users) if (u.email) allEmails.push(u.email);
     owner = data.users.find((u) => u.email === body.ownerEmail)?.id ?? null;
     if (data.users.length < 200) break;
   }
   if (!owner) {
-    return NextResponse.json({ error: `ユーザーが見つかりません: ${body.ownerEmail}` }, { status: 404 });
+    // 対象が居ないときは、存在するメール一覧を返して再実行しやすくする（開発専用）。
+    return NextResponse.json(
+      { error: `ユーザーが見つかりません: ${body.ownerEmail}`, availableEmails: allEmails },
+      { status: 404 }
+    );
   }
 
   // テスト用アプリを用意（衝突しない固定 store_app_id で冪等）。

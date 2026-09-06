@@ -97,6 +97,15 @@ try {
 }
 if (!res.ok) {
   console.error(`✗ サーバーエラー (HTTP ${res.status}): ${json.error ?? JSON.stringify(json)}`);
+  if (Array.isArray(json.availableEmails)) {
+    if (json.availableEmails.length === 0) {
+      console.error("  このDBにはまだユーザーが居ません。先にアプリでサインアップしてください。");
+    } else {
+      console.error("  このDBに存在するメール:");
+      for (const e of json.availableEmails) console.error(`    - ${e}`);
+      console.error(`  → 例: npm run test:pipeline -- --email ${json.availableEmails[0]}`);
+    }
+  }
   process.exit(1);
 }
 
