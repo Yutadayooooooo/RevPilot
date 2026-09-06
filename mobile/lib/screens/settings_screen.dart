@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../data.dart';
 import '../models.dart';
+import '../notifications.dart';
 import '../theme.dart';
 import '../ui.dart';
 import 'apps_screen.dart';
@@ -24,11 +25,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late Future<_SettingsData> _future;
   bool _refreshing = false;
   bool _deleting = false;
+  NotifScope _notifScope = NotifScope.all;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _loadNotifScope();
+  }
+
+  Future<void> _loadNotifScope() async {
+    final s = await NotifStore.scope();
+    if (mounted) setState(() => _notifScope = s);
+  }
+
+  /// 通知対象（すべて / ★1〜2のみ）を切り替える。
+  /// バナー・未読バッジ・通知タブのすべてに共通で効く。
+  Future<void> _setNotifScope(bool lowOnly) async {
+    final next = lowOnly ? NotifScope.low : NotifScope.all;
+    setState(() => _notifScope = next);
+    await NotifStore.setScope(next);
+    HapticFeedback.selectionClick();
   }
 
   Future<_SettingsData> _load() async {
@@ -229,6 +246,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: const TextStyle(fontSize: 12),
                   ),
                   onTap: _refreshing ? null : _refreshFromStores,
+                ),
+              ]),
+              const SizedBox(height: 16),
+
+              // 通知
+              _sectionLabel('通知'),
+              _navCard([
+                SwitchListTile(
+                  secondary: const Icon(Icons.notifications_active_outlined),
+                  title: const Text('★1〜2のときだけ通知する'),
+                  subtitle: Text(
+                    _notifScope == NotifScope.low
+                        ? '低評価レビューだけバナーでお知らせします'
+                        : 'すべての新着レビューをバナーでお知らせします',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  value: _notifScope == NotifScope.low,
+                  onChanged: _setNotifScope,
                 ),
               ]),
               const SizedBox(height: 16),

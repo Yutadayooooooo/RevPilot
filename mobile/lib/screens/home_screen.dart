@@ -28,7 +28,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   static const _notifIndex = 1;
 
-  /// 新着の低評価レビューを拾ってバナーを出す前景ポーリング。
+  /// 新着レビューを拾ってバナーを出す前景ポーリング。
   /// （ローカル通知なのでアプリ起動中のみ。完全終了中の通知はリモートpushが必要）
   static const _pollInterval = Duration(seconds: 30);
   Timer? _poller;
@@ -75,13 +75,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _poller = Timer.periodic(_pollInterval, (_) => _checkNew());
   }
 
-  /// 未通知の低評価レビューをOSバナーで知らせ、バッジも更新する。
+  /// 未通知のレビューをOSバナーで知らせ、バッジも更新する。
   Future<void> _checkNew() async {
     final fresh = await NotifStore.takeUnnotified();
     if (fresh.isEmpty) return;
     // 一度に大量に出さない。
     for (final r in fresh.take(3)) {
-      await LocalNotifier.showLowRating(r);
+      await LocalNotifier.showReview(r);
     }
     if (!mounted) return;
     if (_index == _notifIndex) {

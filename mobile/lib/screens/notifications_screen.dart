@@ -7,7 +7,8 @@ import '../notifications.dart';
 import '../theme.dart';
 import 'review_detail_screen.dart';
 
-/// アプリ内通知フィード。運営からのお知らせ＋低評価レビュー（★1〜2）を新しい順に表示する。
+/// アプリ内通知フィード。運営からのお知らせ＋通知対象のレビューを新しい順に表示する。
+/// 対象（すべて / ★1〜2のみ）は設定タブの「通知」で切り替える。
 /// OSプッシュ（APNs/FCM）ではなく、アプリを開いて確認する通知一覧。
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -28,8 +29,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Future<_NotifData> _load() async {
     // お知らせは失敗しても画面を落とさない（announcements内部で空フォールバック）。
     final announcements = await Repo.announcements();
-    final lowReviews = await NotifStore.lowRatingReviews();
-    return _NotifData(announcements: announcements, lowReviews: lowReviews);
+    final scope = await NotifStore.scope();
+    final reviews = await NotifStore.targetReviews();
+    return _NotifData(
+        announcements: announcements, reviews: reviews, scope: scope);
   }
 
   Future<void> _reload() async {
@@ -47,8 +50,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          final data = snap.data ?? _NotifData(announcements: const [], lowReviews: const []);
-          final isEmpty = data.announcements.isEmpty && data.lowReviews.isEmpty;
+          final data = snap.data ??
+              _NotifData(
+                  announcements: const [],
+                  reviews: const [],
+                  scope: NotifScope.all);
+          final isEmpty = data.announcements.isEmpty && data.reviews.isEmpty;
           return RefreshIndicator(
             onRefresh: _reload,
             child: isEmpty
@@ -61,9 +68,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         for (final a in data.announcements) _announcementCard(context, a),
                         const SizedBox(height: 16),
                       ],
-                      if (data.lowReviews.isNotEmpty) ...[
-                        _sectionLabel('低評価レビュー（★1〜2）'),
-                        for (final r in data.lowReviews) _reviewCard(context, r),
+                      if (data.reviews.isNotEmpty) ...[
+                        _sectionLabel(data.scope == NotifScope.low
+                            ? '低評価レビュー（★1〜2）'
+                            : '新着レビュー'),
+                        for (final r in data.reviews) _reviewCard(context, r),
                       ],
                     ],
                   ),
@@ -84,7 +93,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
           const SizedBox(height: 4),
           Center(
-            child: Text('低評価レビューが入るとここに表示されます',
+            child: Text('新しいレビューが入るとここに表示されます',
                 style: TextStyle(fontSize: 12, color: context.subtleC)),
           ),
         ],
@@ -170,6 +179,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
 class _NotifData {
   final List<Announcement> announcements;
-  final List<ReviewRow> lowReviews;
-  _NotifData({required this.announcements, required this.lowReviews});
+  final List<ReviewRow> reviews;
+  final NotifScope scope;
+  _NotifData(
+      {required this.announcements, required this.reviews, required this.scope});
 }
