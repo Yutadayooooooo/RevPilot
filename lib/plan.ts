@@ -35,18 +35,20 @@ export interface PlanLimits {
  *   原価  AI返信1件 ≈ $0.006 ≈ ¥1.0（claude-sonnet-5 / 入力約500tok・出力約300tok、再生成込みの安全側）
  *         トピック分類1件 ≈ $0.001 ≈ ¥0.16（レビュー取得件数に比例）
  *   純収入 ストア手数料15%（Small Business Program）を引いた額 … Pro ¥1,258 / Max ¥2,533
- *   方針  「上限に張り付いたユーザーでも黒字」を絶対条件にし、原価率は上限時で40%以下に置く。
- *         Pro 500件→原価¥500(40%) / Max 1,000件→原価¥1,000(39%)。
- *         旧値(Pro 1,000 / Max 5,000)はMaxが原価率197%で赤字だったため引き下げた。
+ *   方針  「上限に張り付いたユーザーでも黒字」を絶対条件にする。
+ *         Pro 500件→原価¥500(原価率40%) / Max 2,000件→原価¥2,000(79%・粗利¥533)。
+ *         Maxは表示上「無制限」だが公正利用の実数(2,000件)を必ず併記する。数値を隠した
+ *         「無制限」は景表法リスク、上限なしは損失が青天井になるためどちらも採らない。
+ *         旧値(Pro 1,000 / Max 5,000)はMaxが原価率197%で赤字だったため見直した。
  *   需要  個人開発アプリのレビューは多くて月100件程度。Pro=5アプリ×100件、Max=10アプリ×100件を
  *         カバーできるため、通常利用で上限に当たることはまずない。
  */
 export const PLAN_LIMITS: Record<PlanKey, PlanLimits> = {
   free: { maxApps: 1, aiRepliesPerMonth: 5, bulkReplyLimit: 1, pollIntervalHours: 1, topicAnalysis: false, weeklySummary: false },
   pro: { maxApps: 5, aiRepliesPerMonth: 500, bulkReplyLimit: 20, pollIntervalHours: 1, topicAnalysis: true, weeklySummary: true },
-  max: { maxApps: null, aiRepliesPerMonth: 1000, bulkReplyLimit: null, pollIntervalHours: 1, topicAnalysis: true, weeklySummary: true },
+  max: { maxApps: null, aiRepliesPerMonth: 2000, bulkReplyLimit: null, pollIntervalHours: 1, topicAnalysis: true, weeklySummary: true },
   // Team は現在非公開（共有・権限機能が未実装のため販売停止）。既存の plan 値のために定義は残す。
-  team: { maxApps: null, aiRepliesPerMonth: 2000, bulkReplyLimit: null, pollIntervalHours: 1, topicAnalysis: true, weeklySummary: true },
+  team: { maxApps: null, aiRepliesPerMonth: 4000, bulkReplyLimit: null, pollIntervalHours: 1, topicAnalysis: true, weeklySummary: true },
 };
 
 /** plan文字列（不正値含む）から制限を取得。未知の値はFree扱い。 */
@@ -67,7 +69,7 @@ function isPaidPlan(plan: string | null | undefined): boolean {
  */
 export function aiQuotaReachedMessage(plan: string | null | undefined, limit: number): string {
   if (isPaidPlan(plan)) {
-    return `今月のAI返信が上限（${limit.toLocaleString("en-US")}件）に達しました。翌月1日にリセットされます。継続的に上限の緩和が必要な場合はお問い合わせください。`;
+    return `今月のAI返信が公正利用の上限（${limit.toLocaleString("en-US")}件）に達しました。翌月1日にリセットされます。継続的に上限の緩和が必要な場合はお問い合わせください。`;
   }
   return `今月のAI返信の上限（${limit}件）に達しました。Proにアップグレードすると月500件まで生成できます。`;
 }

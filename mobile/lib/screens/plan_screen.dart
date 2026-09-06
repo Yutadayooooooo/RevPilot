@@ -206,7 +206,7 @@ class _PlanScreenState extends State<PlanScreen> {
                     price: '¥2,980 / 月',
                     features: const [
                       'アプリ 無制限',
-                      'AI返信 月1,000件',
+                      'AI返信 無制限（公正利用 月2,000件）',
                       '全レビュー 一括返信',
                       '自動取得 毎時・トピック分析',
                       '週次サマリー',

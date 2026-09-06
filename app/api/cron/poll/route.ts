@@ -12,6 +12,10 @@ export async function POST(req: NextRequest) {
   if (!isAuthorized(req)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   try {
     const result = await pollAllApps();
+    // 時間予算切れが常態化したら処理能力不足のサイン（並列数・分割の見直しが要る）。
+    if (result.skipped > 0) {
+      console.warn(`poll budget exhausted: ${result.skipped} apps deferred to next run`);
+    }
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: String(e?.message ?? e) }, { status: 500 });

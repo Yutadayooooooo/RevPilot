@@ -8,7 +8,7 @@ export const maxDuration = 60;
 /**
  * ログインユーザーによる手動更新。自分のアプリだけを今すぐ取得する。
  * Web cookie / モバイル Bearer 両対応。
- * Freeプランは自動取得が無い代わりに、この手動更新でレビューを取り込める。
+ * 自動取得は全プラン毎時だが、今すぐ取り込みたいときはこちらを叩く。
  */
 export async function POST(req: NextRequest) {
   const auth = await resolveApiAuth(req);
