@@ -71,44 +71,63 @@ async function pollApps(
       continue; // 1アプリの失敗で全体を止めない
     }
     if (reviews.length === 0) continue;
-
-    const rows = reviews.map((r) => ({ ...r, app_id: app.id }));
-    const { data: upserted, error: upErr } = await db
-      .from("reviews")
-      .upsert(rows, { onConflict: "store,external_id", ignoreDuplicates: true })
-      .select("id, rating, body, external_id");
-    if (upErr) {
-      console.error(upErr);
-      continue;
-    }
-
-    // 新規に入った★1〜2を通知
-    const lineUserId = (app as any).profiles?.line_user_id ?? null;
-    for (const row of upserted ?? []) {
-      if (row.rating <= 2) {
-        await notifyLowRating({
-          appName: app.name,
-          rating: row.rating,
-          body: row.body,
-          lineUserId,
-        });
-      }
-    }
-
-    // 新規レビューをAIでトピック分類 → review_topics に保存（分析画面の要望ランキング用）
-    await classifyNewReviews(db, upserted ?? []);
-
-    inserted += upserted?.length ?? 0;
-
-    // チェックポイント更新（最新レビューID）
-    await db.from("poll_state").upsert({
-      app_id: app.id,
-      last_seen_external_id: reviews[0].external_id,
-      last_polled_at: new Date().toISOString(),
-    });
+    inserted += await ingestReviews(db, app, reviews);
   }
 
   return { inserted, apps: apps.length };
+}
+
+/**
+ * 取得済みレビュー配列を1アプリぶん取り込む共通処理（取得元に依存しない）。
+ * upsert(重複排除) → 新規の★1〜2を通知 → AIトピック分類 → チェックポイント更新。
+ * pollApps（実運用）と検証用エンドポイントの両方から呼ぶことで、
+ * “取得後の配管”を本番コードそのままで検証できる。
+ * @returns 実際に新規挿入された件数（重複は0）
+ */
+export async function ingestReviews(
+  db: ReturnType<typeof serviceClient>,
+  app: { id: string; name: string; profiles?: any },
+  reviews: NormalizedReview[],
+  opts: { skipAi?: boolean } = {}
+): Promise<number> {
+  if (reviews.length === 0) return 0;
+
+  const rows = reviews.map((r) => ({ ...r, app_id: app.id }));
+  // onConflict + ignoreDuplicates: 既知の(store,external_id)は挿入されず select にも出ない。
+  // → 二重取得しても新規分だけが返り、通知も新規にしか飛ばない（漏れ/重複を防ぐ肝）。
+  const { data: upserted, error: upErr } = await db
+    .from("reviews")
+    .upsert(rows, { onConflict: "store,external_id", ignoreDuplicates: true })
+    .select("id, rating, body, external_id");
+  if (upErr) {
+    console.error(upErr);
+    return 0;
+  }
+
+  // 新規に入った★1〜2を通知
+  const lineUserId = app.profiles?.line_user_id ?? null;
+  for (const row of upserted ?? []) {
+    if (row.rating <= 2) {
+      await notifyLowRating({
+        appName: app.name,
+        rating: row.rating,
+        body: row.body,
+        lineUserId,
+      });
+    }
+  }
+
+  // 新規レビューをAIでトピック分類 → review_topics に保存（分析画面の要望ランキング用）
+  if (!opts.skipAi) await classifyNewReviews(db, upserted ?? []);
+
+  // チェックポイント更新（最新レビューID）
+  await db.from("poll_state").upsert({
+    app_id: app.id,
+    last_seen_external_id: reviews[0].external_id,
+    last_polled_at: new Date().toISOString(),
+  });
+
+  return upserted?.length ?? 0;
 }
 
 /**

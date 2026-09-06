@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "setup:stripe": "node scripts/setup-stripe.mjs"
+    "setup:stripe": "node scripts/setup-stripe.mjs",
+    "test:pipeline": "node --env-file=.env.local scripts/test-review-pipeline.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.1",
