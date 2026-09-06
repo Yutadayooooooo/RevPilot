@@ -2,7 +2,7 @@ import type { PlanKey } from "./stripe";
 
 /**
  * プラン別の機能制限を一元管理する。
- * 課金(profiles.plan)の値に応じて、アプリ数・AI返信数・自動取得を制御。
+ * 課金(profiles.plan)の値に応じて、アプリ数・AI返信数・自動取得の間隔を制御。
  */
 export interface PlanLimits {
   /** 連携アプリの上限（null = 無制限） */
@@ -14,21 +14,38 @@ export interface PlanLimits {
    * 1 = 一括不可（1件ずつのみ）/ null = 無制限（全件一括）。
    */
   bulkReplyLimit: number | null;
-  /** cronによる自動取得を許可するか（Freeは手動更新のみ） */
-  autoPolling: boolean;
+  /**
+   * cronによる自動取得の間隔（時間）。null = 自動取得なし。
+   * Freeも自動取得の対象にする（通知が来ないとプロダクトとして成立しないため）が、
+   * 1日1回に落として「すぐ気づける」を有料の価値軸にする。
+   */
+  pollIntervalHours: number | null;
+  /**
+   * 新着レビューのAIトピック分類（分析タブの要望ランキング）。
+   * レビュー件数に比例して原価がかかるため、無課金では走らせない。
+   */
+  topicAnalysis: boolean;
   /** 週次サマリーメールを配信するか（Pro以上） */
   weeklySummary: boolean;
 }
 
-// 有料プランは表向き「無制限」だが、原価保護のための"フェアユース上限"を内部的に設ける。
-// 通常利用（月〜数百件）ではまず到達しない高い水準。到達時も翌月リセットで穏やかに縮退。
-// 参考原価: AI返信1件 ≈ $0.005。Pro(¥1,480≈$10)で1,000件でも原価$5に収まる。
+/*
+ * 上限の根拠（2026-09 時点）:
+ *   原価  AI返信1件 ≈ $0.006 ≈ ¥1.0（claude-sonnet-5 / 入力約500tok・出力約300tok、再生成込みの安全側）
+ *         トピック分類1件 ≈ $0.001 ≈ ¥0.16（レビュー取得件数に比例）
+ *   純収入 ストア手数料15%（Small Business Program）を引いた額 … Pro ¥1,258 / Max ¥2,533
+ *   方針  「上限に張り付いたユーザーでも黒字」を絶対条件にし、原価率は上限時で40%以下に置く。
+ *         Pro 500件→原価¥500(40%) / Max 1,000件→原価¥1,000(39%)。
+ *         旧値(Pro 1,000 / Max 5,000)はMaxが原価率197%で赤字だったため引き下げた。
+ *   需要  個人開発アプリのレビューは多くて月100件程度。Pro=5アプリ×100件、Max=10アプリ×100件を
+ *         カバーできるため、通常利用で上限に当たることはまずない。
+ */
 export const PLAN_LIMITS: Record<PlanKey, PlanLimits> = {
-  free: { maxApps: 1, aiRepliesPerMonth: 10, bulkReplyLimit: 1, autoPolling: false, weeklySummary: false },
-  pro: { maxApps: 5, aiRepliesPerMonth: 1000, bulkReplyLimit: 20, autoPolling: true, weeklySummary: true },
-  max: { maxApps: null, aiRepliesPerMonth: 5000, bulkReplyLimit: null, autoPolling: true, weeklySummary: true },
-  // Team は複数メンバーで共有するため、フェアユース上限も高めに設定。
-  team: { maxApps: null, aiRepliesPerMonth: 20000, bulkReplyLimit: null, autoPolling: true, weeklySummary: true },
+  free: { maxApps: 1, aiRepliesPerMonth: 10, bulkReplyLimit: 1, pollIntervalHours: 24, topicAnalysis: false, weeklySummary: false },
+  pro: { maxApps: 5, aiRepliesPerMonth: 500, bulkReplyLimit: 20, pollIntervalHours: 1, topicAnalysis: true, weeklySummary: true },
+  max: { maxApps: null, aiRepliesPerMonth: 1000, bulkReplyLimit: null, pollIntervalHours: 1, topicAnalysis: true, weeklySummary: true },
+  // Team は現在非公開（共有・権限機能が未実装のため販売停止）。既存の plan 値のために定義は残す。
+  team: { maxApps: null, aiRepliesPerMonth: 2000, bulkReplyLimit: null, pollIntervalHours: 1, topicAnalysis: true, weeklySummary: true },
 };
 
 /** plan文字列（不正値含む）から制限を取得。未知の値はFree扱い。 */
@@ -37,7 +54,7 @@ export function limitsForPlan(plan: string | null | undefined): PlanLimits {
   return PLAN_LIMITS.free;
 }
 
-/** 有料プラン（フェアユース上限を持つ）かどうか。 */
+/** 有料プランかどうか。 */
 function isPaidPlan(plan: string | null | undefined): boolean {
   return plan === "pro" || plan === "max" || plan === "team";
 }
@@ -45,13 +62,13 @@ function isPaidPlan(plan: string | null | undefined): boolean {
 /**
  * 月次AI返信の上限に達したときのユーザー向けメッセージ。
  * - Free: アップグレードを促す
- * - 有料（フェアユース上限）: 翌月リセットと問い合わせ導線を案内（“無制限”の体験を壊さない）
+ * - 有料: 翌月リセットと問い合わせ導線を案内
  */
 export function aiQuotaReachedMessage(plan: string | null | undefined, limit: number): string {
   if (isPaidPlan(plan)) {
-    return `今月のAI返信が公正利用の上限（${limit.toLocaleString("en-US")}件）に達しました。翌月1日にリセットされます。継続的に上限の緩和が必要な場合はお問い合わせください。`;
+    return `今月のAI返信が上限（${limit.toLocaleString("en-US")}件）に達しました。翌月1日にリセットされます。継続的に上限の緩和が必要な場合はお問い合わせください。`;
   }
-  return `今月のAI返信の上限（${limit}件）に達しました。Pro以上のプランで大幅に拡大できます。`;
+  return `今月のAI返信の上限（${limit}件）に達しました。Proにアップグレードすると月500件まで生成できます。`;
 }
 
 /** 今月(UTC)の開始時刻をISO文字列で返す。月次上限のカウント境界に使う。 */

@@ -182,7 +182,7 @@ class _PlanScreenState extends State<PlanScreen> {
                       'アプリ 1件まで',
                       'AI返信 月10件まで',
                       '返信は1件ずつ（一括なし）',
-                      '手動更新のみ',
+                      '自動取得は1日1回',
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -193,9 +193,10 @@ class _PlanScreenState extends State<PlanScreen> {
                     popular: true,
                     features: const [
                       'アプリ 5件まで',
-                      'AI返信 無制限',
+                      'AI返信 月500件',
                       '一括返信 最大20件',
-                      '自動取得・週次サマリー',
+                      '自動取得 毎時・トピック分析',
+                      '週次サマリー',
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -205,30 +206,14 @@ class _PlanScreenState extends State<PlanScreen> {
                     price: '¥2,980 / 月',
                     features: const [
                       'アプリ 無制限',
-                      'AI返信 無制限',
+                      'AI返信 月1,000件',
                       '全レビュー 一括返信',
-                      '自動取得・週次サマリー・優先処理',
+                      '自動取得 毎時・トピック分析',
+                      '週次サマリー',
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  // 別セグメント（チーム向け）。個人向け3層の意思決定を薄めないよう分離。
-                  Text('チーム向け',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: context.subtleC)),
-                  const SizedBox(height: 8),
-                  _planCard(
-                    plan: 'team',
-                    name: 'Team',
-                    price: '¥5,800 / 月',
-                    features: const [
-                      'Maxの全機能',
-                      '複数メンバーで共有',
-                      'メンバー別の権限・履歴',
-                      'まとめて請求',
-                    ],
-                  ),
+                  // Team（チーム向け）は共有・権限機能が未実装のため販売停止中。
+                  // 実装が入るまでカードを出さない（lib/stripe.ts の hidden と対応）。
                   if (isPaid) ...[
                     const SizedBox(height: 20),
                     OutlinedButton.icon(

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { resolveApiAuth } from "@/lib/supabase/api-auth";
-import { getStripe, priceIdForPlan, siteUrl, type PlanKey } from "@/lib/stripe";
+import { getStripe, isPurchasablePlan, priceIdForPlan, siteUrl, type PlanKey } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
 
 /**
  * サブスク購入用の Stripe Checkout セッションを作成し、リダイレクト先URLを返す。
  * Web cookie / モバイル Bearer 両対応。body: { plan: "pro" | "max" }
+ * 販売停止中のプラン（PLANS の hidden）は受け付けない。
  */
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
@@ -19,7 +20,10 @@ export async function POST(req: NextRequest) {
 
   const { plan } = (await req.json()) as { plan?: PlanKey };
   if (plan !== "pro" && plan !== "max" && plan !== "team") {
-    return NextResponse.json({ error: "plan は pro / max / team のいずれか" }, { status: 400 });
+    return NextResponse.json({ error: "plan は pro / max のいずれか" }, { status: 400 });
+  }
+  if (!isPurchasablePlan(plan)) {
+    return NextResponse.json({ error: `${plan} は現在ご契約いただけません` }, { status: 400 });
   }
 
   const priceId = priceIdForPlan(plan);

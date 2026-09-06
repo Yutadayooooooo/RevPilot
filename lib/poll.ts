@@ -9,14 +9,31 @@ import { classifyTopics } from "./ai";
 const APP_SELECT = "id, owner, store, store_app_id, name, profiles(line_user_id, plan)";
 
 /**
- * cron(毎時)から呼ぶ自動取得。自動取得が許可されたプラン(Pro以上)のアプリのみ巡回する。
- * Freeは対象外（手動更新のみ）。service_roleでRLSをバイパス。
+ * cron(毎時)から呼ぶ自動取得。全プランを対象にするが、巡回の間隔はプランごとに違う
+ * （Pro以上=毎時 / Free=1日1回）。前回取得からの経過時間で間引く。
+ * service_roleでRLSをバイパス。
  */
 export async function pollAllApps(): Promise<{ inserted: number; apps: number }> {
   const db = serviceClient();
   const { data: apps, error } = await db.from("apps").select(APP_SELECT);
   if (error) throw error;
-  const eligible = (apps ?? []).filter((a) => limitsForPlan((a as any).profiles?.plan).autoPolling);
+
+  // 最終取得時刻をまとめて引き、プランの間隔に満たないアプリは今回スキップする。
+  const { data: states } = await db.from("poll_state").select("app_id, last_polled_at");
+  const lastPolled = new Map<string, string | null>(
+    (states ?? []).map((s: any) => [s.app_id, s.last_polled_at])
+  );
+
+  const now = Date.now();
+  const eligible = (apps ?? []).filter((a: any) => {
+    const hours = limitsForPlan(a.profiles?.plan).pollIntervalHours;
+    if (hours === null) return false;
+    const last = lastPolled.get(a.id);
+    if (!last) return true; // 未取得のアプリは即回す
+    // cronの起動ゆらぎで1周期まるごと飛ばさないよう5分の猶予を持たせる。
+    return now - new Date(last).getTime() >= hours * 3_600_000 - 300_000;
+  });
+
   return pollApps(db, eligible);
 }
 
@@ -79,7 +96,7 @@ async function pollApps(
 
 /**
  * 取得済みレビュー配列を1アプリぶん取り込む共通処理（取得元に依存しない）。
- * upsert(重複排除) → 新規の★1〜2を通知 → AIトピック分類 → チェックポイント更新。
+ * upsert(重複排除) → 新規の★1〜2を通知 → AIトピック分類(Pro以上) → チェックポイント更新。
  * pollApps（実運用）と検証用エンドポイントの両方から呼ぶことで、
  * “取得後の配管”を本番コードそのままで検証できる。
  * @returns 実際に新規挿入された件数（重複は0）
@@ -117,8 +134,10 @@ export async function ingestReviews(
     }
   }
 
-  // 新規レビューをAIでトピック分類 → review_topics に保存（分析画面の要望ランキング用）
-  if (!opts.skipAi) await classifyNewReviews(db, upserted ?? []);
+  // 新規レビューをAIでトピック分類 → review_topics に保存（分析画面の要望ランキング用）。
+  // レビュー件数に比例して原価がかかるので、トピック分析があるプランだけ走らせる。
+  const canClassify = limitsForPlan(app.profiles?.plan).topicAnalysis;
+  if (!opts.skipAi && canClassify) await classifyNewReviews(db, upserted ?? []);
 
   // チェックポイント更新（最新レビューID）
   await db.from("poll_state").upsert({

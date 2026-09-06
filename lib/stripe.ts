@@ -18,6 +18,8 @@ export interface PlanDef {
   popular?: boolean;
   /** individual=個人向け3層 / team=別セグメント（法人・チーム向け） */
   segment?: "individual" | "team";
+  /** 販売停止中（UIに出さない）。既存契約のために定義だけ残すプラン。 */
+  hidden?: boolean;
   /** Stripe の price ID を入れた環境変数名（free は課金なし） */
   priceEnv?: "STRIPE_PRICE_PRO" | "STRIPE_PRICE_MAX" | "STRIPE_PRICE_TEAM";
 }
@@ -33,7 +35,7 @@ export const PLANS: PlanDef[] = [
     key: "free",
     name: "Free",
     price: "¥0",
-    features: ["1アプリ", "AI返信 月10件", "返信は1件ずつ", "手動更新"],
+    features: ["1アプリ", "AI返信 月10件", "返信は1件ずつ", "自動取得は1日1回"],
   },
   {
     key: "pro",
@@ -42,9 +44,10 @@ export const PLANS: PlanDef[] = [
     popular: true,
     features: [
       "5アプリまで",
-      "AI返信 無制限",
+      "AI返信 月500件",
       "一括返信 最大20件",
-      "自動取得",
+      "自動取得 毎時",
+      "トピック分析",
       "週次サマリー",
     ],
     priceEnv: "STRIPE_PRICE_PRO",
@@ -56,20 +59,22 @@ export const PLANS: PlanDef[] = [
     segment: "individual",
     features: [
       "アプリ無制限",
-      "AI返信 無制限",
+      "AI返信 月1,000件",
       "全レビュー 一括返信",
-      "自動取得",
+      "自動取得 毎時",
+      "トピック分析",
       "週次サマリー",
-      "優先処理",
     ],
     priceEnv: "STRIPE_PRICE_MAX",
   },
-  // 別セグメント：個人向け3層とは分けて提示し、中間(Pro)のセンターステージを保つ。
+  // 販売停止中。共有・権限・まとめて請求が未実装のため公開しない（未実装機能の販売は
+  // 景表法／ストア審査の両面でリスク）。実装が入るまで hidden のままにする。
   {
     key: "team",
     name: "Team",
     price: "¥5,800/月",
     segment: "team",
+    hidden: true,
     features: [
       "Maxの全機能",
       "複数メンバーで共有",
@@ -79,6 +84,14 @@ export const PLANS: PlanDef[] = [
     priceEnv: "STRIPE_PRICE_TEAM",
   },
 ];
+
+/** 公開中（購入可能）のプランのみ。UIはこちらを使う。 */
+export const PUBLIC_PLANS: PlanDef[] = PLANS.filter((p) => !p.hidden);
+
+/** 販売中のプランか（非公開プランの新規購入を止める） */
+export function isPurchasablePlan(plan: PlanKey): boolean {
+  return PUBLIC_PLANS.some((p) => p.key === plan && p.priceEnv);
+}
 
 /** 課金が有効か（secret key があるか） */
 export function billingConfigured(): boolean {

@@ -32,7 +32,6 @@ export default function TokushohoPage() {
             <div>Free：¥0</div>
             <div>Pro：月額 ¥1,480（税込）</div>
             <div>Max：月額 ¥2,980（税込）</div>
-            <div>Team：月額 ¥5,800（税込）</div>
             <div className="text-sm text-slate-500">
               ※各プランの内容・最新価格は本サービス内のプラン画面に表示します。
             </div>
