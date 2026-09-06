@@ -130,6 +130,24 @@ create policy "own replies" on replies
     )
   );
 
+-- トピックはクライアントが reviews に埋め込んで読む（reviews-data.ts / mobile data.dart）ため
+-- 参照だけ許可する。書き込みは取り込み処理(service_role)のみ。
+alter table review_topics enable row level security;
+drop policy if exists "own review topics" on review_topics;
+create policy "own review topics" on review_topics
+  for select using (
+    exists (
+      select 1 from reviews r join apps a on a.id = r.app_id
+      where r.id = review_topics.review_id and a.owner = auth.uid()
+    )
+  );
+
+-- ポーリングのチェックポイントはサーバー(service_role)専用。
+-- ポリシーを一つも作らない = anon/authenticated からは読み書き不可。
+-- （RLS未適用のままだと他人の last_seen_external_id を進められ、レビューを恒久的に
+--   取りこぼさせる改ざんが可能になる）
+alter table poll_state enable row level security;
+
 -- お知らせ: 有効かつ期間内のものは全員が閲覧可。作成/更新はservice_role（管理者）のみ。
 alter table announcements enable row level security;
 create policy "read active announcements" on announcements
