@@ -36,7 +36,8 @@ if (!SECRET) {
   process.exit(1);
 }
 
-// 合成レビュー（★1〜5を1件ずつ）。実行ごとに一意なIDにして、--keep でも毎回“新規”になるように。
+// 合成レビュー（App Store と Google Play の両方 × ★1〜5）。
+// 実行ごとに一意なIDにして、--keep でも毎回“新規”になるように。
 const runId = Date.now();
 const bodies = {
   1: "起動するたびに落ちて使い物になりません。返金してほしい。",
@@ -45,22 +46,29 @@ const bodies = {
   4: "便利です。あと少しUIが良くなれば最高。",
   5: "個人開発のレビュー管理がすごく楽になりました！最高です。",
 };
-const reviews = [5, 4, 3, 2, 1].map((rating) => ({
-  store: "appstore",
-  external_id: `test-${runId}-r${rating}`,
-  rating,
-  title: `テストレビュー ★${rating}`,
-  body: bodies[rating],
-  author: `tester_${rating}`,
-  territory: "JPN",
-  app_version: "1.0.0",
-  reviewed_at: new Date().toISOString(),
-  raw: { synthetic: true },
-}));
+const reviews = [];
+for (const store of ["appstore", "googleplay"]) {
+  for (const rating of [5, 4, 3, 2, 1]) {
+    reviews.push({
+      store,
+      external_id: `test-${runId}-${store}-r${rating}`,
+      rating,
+      title: store === "appstore" ? `テストレビュー ★${rating}` : null, // Google Playにtitleは無い
+      body: bodies[rating],
+      author: `tester_${store}_${rating}`,
+      territory: store === "appstore" ? "JPN" : "ja",
+      app_version: "1.0.0",
+      reviewed_at: new Date().toISOString(),
+      raw: { synthetic: true, store },
+    });
+  }
+}
 // reviews[0] が最新扱い（チェックポイント検証用）。
 const lowCount = reviews.filter((r) => r.rating <= 2).length;
+const byStore = `App Store ${reviews.filter((r) => r.store === "appstore").length}件 / Google Play ${reviews.filter((r) => r.store === "googleplay").length}件`;
 
-console.log(`▶ 対象: ${BASE}/api/dev/seed-reviews  user=${EMAIL}  reviews=${reviews.length}（★1〜2=${lowCount}）`);
+console.log(`▶ 対象: ${BASE}/api/dev/seed-reviews  user=${EMAIL}`);
+console.log(`  合成レビュー: ${reviews.length}件（${byStore}／★1〜2=${lowCount}）`);
 if (SKIP_AI) console.log("  （AI分類はスキップ）");
 
 let res, json;
