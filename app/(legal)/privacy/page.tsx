@@ -1,4 +1,5 @@
-import { H2, P, UL, Fill, DraftNotice, LegalFooter } from "../_ui";
+import { H2, P, UL, LegalFooter } from "../_ui";
+import { BUSINESS } from "@/lib/site";
 
 export const metadata = { title: "プライバシーポリシー — RevPilot" };
 
@@ -8,10 +9,9 @@ export default function PrivacyPage() {
       <h1 className="mb-2 text-2xl font-bold text-slate-900">
         プライバシーポリシー
       </h1>
-      <DraftNotice />
 
       <P>
-        <Fill>【事業者名】</Fill>（以下「当方」）は、アプリケーションおよびサービス「RevPilot」
+        {BUSINESS.displayName}（以下「当方」）は、アプリケーションおよびサービス「RevPilot」
         （以下「本サービス」）における利用者の個人情報・データの取扱いについて、以下のとおり定めます。
       </P>
 
@@ -30,7 +30,8 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>決済情報</strong>：サブスクリプションの状態。カード番号等の決済情報は決済事業者
-          （Stripe）が取得・管理し、<strong>当方はカード情報を保持しません</strong>。
+          （Stripe）またはアプリ内課金（Apple / Google）が取得・管理し、
+          <strong>当方はカード情報を保持しません</strong>。
         </li>
         <li>
           <strong>利用ログ</strong>：機能の利用状況、エラー情報等（品質改善のため）。
@@ -62,7 +63,7 @@ export default function PrivacyPage() {
           <strong>Anthropic（Claude API）</strong>：AI返信文案の生成のため、対象レビューの本文等を送信します。
         </li>
         <li>
-          <strong>Apple / Google</strong>：レビュー取得・返信投稿のための各ストアAPI。
+          <strong>Apple / Google</strong>：レビュー取得・返信投稿のための各ストアAPI、およびアプリ内課金。
         </li>
         <li>
           <strong>メール送信サービス</strong>：通知メールの配信のため。
@@ -87,8 +88,9 @@ export default function PrivacyPage() {
 
       <H2>6. 保有期間・削除</H2>
       <P>
-        利用者のデータは、アカウントが有効な間、上記目的の達成に必要な期間保有します。退会・削除のご依頼が
-        あった場合、法令上の保存義務がある情報を除き、合理的な期間内に削除します。
+        利用者のデータは、アカウントが有効な間、上記目的の達成に必要な期間保有します。アプリ内の「アカウントを削除」
+        または退会のご依頼があった場合、法令上の保存義務がある情報を除き、関連データ（連携アプリ・レビュー・返信・
+        ストア資格情報等）を速やかに削除します。
       </P>
 
       <H2>7. 利用者の権利</H2>
@@ -104,15 +106,11 @@ export default function PrivacyPage() {
 
       <H2>9. お問い合わせ窓口</H2>
       <UL>
-        <li>
-          事業者名：<Fill>【事業者名】</Fill>
-        </li>
-        <li>
-          連絡先：<Fill>【メールアドレス】</Fill>
-        </li>
+        <li>事業者名：{BUSINESS.displayName}</li>
+        <li>連絡先：{BUSINESS.email}</li>
       </UL>
 
-      <LegalFooter updated="2026年7月25日" />
+      <LegalFooter updated="2026年8月6日" />
     </>
   );
 }

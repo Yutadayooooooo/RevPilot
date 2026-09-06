@@ -1,4 +1,5 @@
-import { H2, P, Fill, DraftNotice, LegalFooter } from "../_ui";
+import { P, LegalFooter } from "../_ui";
+import { BUSINESS, SITE_URL } from "@/lib/site";
 import type { ReactNode } from "react";
 
 export const metadata = { title: "特定商取引法に基づく表記 — RevPilot" };
@@ -18,38 +19,14 @@ export default function TokushohoPage() {
       <h1 className="mb-2 text-2xl font-bold text-slate-900">
         特定商取引法に基づく表記
       </h1>
-      <DraftNotice />
 
       <dl>
-        <Row label="販売事業者">
-          <Fill>【事業者名 / 屋号】</Fill>
-        </Row>
-        <Row label="運営統括責任者">
-          <Fill>【氏名】</Fill>
-        </Row>
-        <Row label="所在地">
-          <Fill>【住所】</Fill>
-          <P>
-            <span className="text-sm text-slate-500">
-              ※個人事業主の場合、請求があったときは遅滞なく開示します。この記載で対応する場合は上記を
-              「請求があったら遅滞なく開示します」に置き換えてください。
-            </span>
-          </P>
-        </Row>
-        <Row label="電話番号">
-          <Fill>【電話番号】</Fill>
-          <P>
-            <span className="text-sm text-slate-500">
-              ※同上（請求があったら遅滞なく開示、の運用も可）。
-            </span>
-          </P>
-        </Row>
-        <Row label="メールアドレス">
-          <Fill>【メールアドレス】</Fill>
-        </Row>
-        <Row label="販売URL">
-          <Fill>【本サービスのURL】</Fill>
-        </Row>
+        <Row label="販売事業者">{BUSINESS.displayName}</Row>
+        <Row label="運営統括責任者">{BUSINESS.operator}</Row>
+        <Row label="所在地">{BUSINESS.addressDisclosure}</Row>
+        <Row label="電話番号">{BUSINESS.phoneDisclosure}</Row>
+        <Row label="メールアドレス">{BUSINESS.email}</Row>
+        <Row label="販売URL">{SITE_URL}</Row>
         <Row label="販売価格">
           <div className="space-y-1">
             <div>Free：¥0</div>
@@ -65,7 +42,7 @@ export default function TokushohoPage() {
           インターネット接続に必要な通信料等は利用者の負担となります。
         </Row>
         <Row label="支払方法">
-          クレジットカード（決済事業者：Stripe）
+          クレジットカード（決済事業者：Stripe）、または App Store / Google Play のアプリ内課金
         </Row>
         <Row label="支払時期">
           サブスクリプションのお申し込み時に初回課金し、以後は解約されない限り各期間の満了時に自動更新・課金します。
@@ -84,7 +61,7 @@ export default function TokushohoPage() {
         </Row>
       </dl>
 
-      <LegalFooter updated="2026年7月25日" />
+      <LegalFooter updated="2026年8月6日" />
     </>
   );
 }

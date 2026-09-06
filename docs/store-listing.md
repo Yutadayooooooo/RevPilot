@@ -1,7 +1,7 @@
 # ストア掲載メタデータ & 申請チェックリスト（RevPilot）
 
 このドキュメントは App Store / Google Play への申請素材の下書きです。
-`【…】` は事業者情報などの記入箇所。公開前に文言と価格を最終確認してください。
+事業者情報は `lib/site.ts` に集約済み（法務3ページが参照）。公開前に文言と価格を最終確認してください。
 
 ---
 
@@ -15,10 +15,13 @@
 | 対応言語 | 日本語 |
 | 対象年齢 | 4+ / 全年齢 |
 | 料金 | 無料（アプリ内課金あり: Pro/Max/Team サブスク） |
-| 利用規約 URL | `【本番ドメイン】/terms` |
-| プライバシーポリシー URL | `【本番ドメイン】/privacy` |
-| 特商法表記 URL | `【本番ドメイン】/tokushoho` |
-| サポート URL / 連絡先 | `【サポートURL または メール】` |
+| 利用規約 URL | `https://revpilot.vercel.app/terms` |
+| プライバシーポリシー URL | `https://revpilot.vercel.app/privacy` |
+| 特商法表記 URL | `https://revpilot.vercel.app/tokushoho` |
+| サポート URL / 連絡先 | `revpilot.hq@gmail.com` |
+
+> ⚠️ URLは Vercel 無料ドメイン想定（`revpilot.vercel.app`）。デプロイ後に実際のサブドメインを確認し、
+> 異なる場合は `NEXT_PUBLIC_SITE_URL` と本ファイル・各ストアの登録URLを差し替えること。
 
 ---
 
@@ -113,8 +116,8 @@ App Store と Google Play のレビューを一つの受信箱に集約。新着
 
 ## 6. 申請前チェックリスト
 
-- [ ] 法務ページ 3種を本番ドメインで公開・URLをストアに登録
-- [ ] `【…】` プレースホルダをすべて実データに置換
+- [ ] 法務ページ 3種を本番ドメインで公開・URLをストアに登録（Vercelへデプロイ後）
+- [x] `【…】` プレースホルダをすべて実データに置換（事業者情報は `lib/site.ts` に集約）
 - [ ] サブスク価格・自動更新文言の整合（アプリ内 / 特商法 / ストア）
 - [ ] 決済方式の最終判断（iOS: IAP対応 or 非iOSに限定して申請）
 - [ ] バンドルID・バージョン・ビルド番号の設定（`Info.plist` / `pubspec.yaml`）

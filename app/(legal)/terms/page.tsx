@@ -1,4 +1,5 @@
-import { H2, P, UL, Fill, DraftNotice, LegalFooter } from "../_ui";
+import { H2, P, UL, LegalFooter } from "../_ui";
+import { BUSINESS } from "@/lib/site";
 
 export const metadata = { title: "利用規約 — RevPilot" };
 
@@ -6,10 +7,9 @@ export default function TermsPage() {
   return (
     <>
       <h1 className="mb-2 text-2xl font-bold text-slate-900">利用規約</h1>
-      <DraftNotice />
 
       <P>
-        本利用規約（以下「本規約」）は、<Fill>【事業者名】</Fill>
+        本利用規約（以下「本規約」）は、{BUSINESS.displayName}
         （以下「当方」）が提供するアプリケーションおよびサービス「RevPilot」（以下「本サービス」）の
         利用条件を定めるものです。利用者は、本サービスを利用することで本規約に同意したものとみなされます。
       </P>
@@ -32,7 +32,8 @@ export default function TermsPage() {
           特定商取引法に基づく表記に定めるとおりです。
         </li>
         <li>
-          決済は決済事業者（Stripe）を通じて行われます。カード情報は決済事業者が管理し、当方は保持しません。
+          決済は、Web では決済事業者（Stripe）を通じて、iOS / Android のアプリ内ではアプリ内課金
+          （App Store / Google Play）を通じて行われます。カード情報は各決済事業者が管理し、当方は保持しません。
         </li>
         <li>
           サブスクリプションは、解約されない限り各期間の満了時に自動更新され、当該期間分の料金が課金されます。
@@ -97,7 +98,7 @@ export default function TermsPage() {
       <H2>第9条（準拠法・管轄）</H2>
       <P>
         本規約は日本法に準拠し、本サービスに関して紛争が生じた場合は、
-        <Fill>【所在地を管轄する裁判所】</Fill>を第一審の専属的合意管轄裁判所とします。
+        {BUSINESS.court}を第一審の専属的合意管轄裁判所とします。
       </P>
 
       <H2>第10条（本規約の変更）</H2>
@@ -108,10 +109,10 @@ export default function TermsPage() {
 
       <H2>お問い合わせ</H2>
       <P>
-        本規約に関するお問い合わせは <Fill>【メールアドレス】</Fill> までご連絡ください。
+        本規約に関するお問い合わせは {BUSINESS.email} までご連絡ください。
       </P>
 
-      <LegalFooter updated="2026年7月25日" />
+      <LegalFooter updated="2026年8月6日" />
     </>
   );
 }
