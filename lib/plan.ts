@@ -16,8 +16,9 @@ export interface PlanLimits {
   bulkReplyLimit: number | null;
   /**
    * cronによる自動取得の間隔（時間）。null = 自動取得なし。
-   * Freeも自動取得の対象にする（通知が来ないとプロダクトとして成立しないため）が、
-   * 1日1回に落として「すぐ気づける」を有料の価値軸にする。
+   * 全プラン毎時。取得そのものにAI原価がかからない（分類は topicAnalysis で別管理）ため、
+   * 「気づくのが遅い無料版」で第一印象を損なうより、取得は全員に開放する。
+   * 将来コストが問題になったらこの値だけ上げれば間隔を落とせる。
    */
   pollIntervalHours: number | null;
   /**
@@ -41,7 +42,7 @@ export interface PlanLimits {
  *         カバーできるため、通常利用で上限に当たることはまずない。
  */
 export const PLAN_LIMITS: Record<PlanKey, PlanLimits> = {
-  free: { maxApps: 1, aiRepliesPerMonth: 10, bulkReplyLimit: 1, pollIntervalHours: 24, topicAnalysis: false, weeklySummary: false },
+  free: { maxApps: 1, aiRepliesPerMonth: 5, bulkReplyLimit: 1, pollIntervalHours: 1, topicAnalysis: false, weeklySummary: false },
   pro: { maxApps: 5, aiRepliesPerMonth: 500, bulkReplyLimit: 20, pollIntervalHours: 1, topicAnalysis: true, weeklySummary: true },
   max: { maxApps: null, aiRepliesPerMonth: 1000, bulkReplyLimit: null, pollIntervalHours: 1, topicAnalysis: true, weeklySummary: true },
   // Team は現在非公開（共有・権限機能が未実装のため販売停止）。既存の plan 値のために定義は残す。

@@ -9,8 +9,8 @@ import { classifyTopics } from "./ai";
 const APP_SELECT = "id, owner, store, store_app_id, name, profiles(line_user_id, plan)";
 
 /**
- * cron(毎時)から呼ぶ自動取得。全プランを対象にするが、巡回の間隔はプランごとに違う
- * （Pro以上=毎時 / Free=1日1回）。前回取得からの経過時間で間引く。
+ * cron(毎時)から呼ぶ自動取得。現在は全プラン毎時だが、プランごとの間隔
+ * (pollIntervalHours)で間引ける構造にしてある（原価が問題になったら値を上げるだけ）。
  * service_roleでRLSをバイパス。
  */
 export async function pollAllApps(): Promise<{ inserted: number; apps: number }> {

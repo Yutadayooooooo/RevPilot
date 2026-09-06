@@ -35,7 +35,7 @@ export const PLANS: PlanDef[] = [
     key: "free",
     name: "Free",
     price: "¥0",
-    features: ["1アプリ", "AI返信 月10件", "返信は1件ずつ", "自動取得は1日1回"],
+    features: ["1アプリ", "AI返信 月5件", "返信は1件ずつ", "自動取得 毎時"],
   },
   {
     key: "pro",

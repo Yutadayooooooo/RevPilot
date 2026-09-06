@@ -180,9 +180,9 @@ class _PlanScreenState extends State<PlanScreen> {
                     price: '¥0',
                     features: const [
                       'アプリ 1件まで',
-                      'AI返信 月10件まで',
+                      'AI返信 月5件まで',
                       '返信は1件ずつ（一括なし）',
-                      '自動取得は1日1回',
+                      '自動取得 毎時',
                     ],
                   ),
                   const SizedBox(height: 12),
