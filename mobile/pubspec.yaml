@@ -43,6 +43,8 @@ dependencies:
   in_app_purchase: ^3.2.0
   # アプリ内通知の既読位置（最終閲覧時刻）をローカル保存
   shared_preferences: ^2.3.2
+  # 低評価レビューのOSバナー通知（ローカル通知。リモートpushと違いApple Developer登録不要）
+  flutter_local_notifications: ^18.0.1
 
 dev_dependencies:
   flutter_test:

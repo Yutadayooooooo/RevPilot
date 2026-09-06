@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../local_notifications.dart';
 import '../notifications.dart';
 import 'reviews_screen.dart';
 import 'notifications_screen.dart';
@@ -25,6 +28,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   static const _notifIndex = 1;
 
+  /// 新着の低評価レビューを拾ってバナーを出す前景ポーリング。
+  /// （ローカル通知なのでアプリ起動中のみ。完全終了中の通知はリモートpushが必要）
+  static const _pollInterval = Duration(seconds: 30);
+  Timer? _poller;
+
   final _screens = const [
     ReviewsScreen(),
     NotificationsScreen(),
@@ -36,19 +44,51 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    LocalNotifier.init(); // 通知許可のリクエスト（初回のみダイアログ）
     _refreshUnread();
+    _startPolling();
   }
 
   @override
   void dispose() {
+    _poller?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 復帰時にバッジを更新（バックグラウンド中に新着があるかもしれない）。
-    if (state == AppLifecycleState.resumed && _index != _notifIndex) {
+    if (state == AppLifecycleState.resumed) {
+      // 復帰時に即チェックし、以後の定期チェックも再開する。
+      if (_index != _notifIndex) _refreshUnread();
+      _checkNew();
+      _startPolling();
+    } else {
+      // 背面では止める（無駄な通信を避ける）。
+      _poller?.cancel();
+      _poller = null;
+    }
+  }
+
+  void _startPolling() {
+    _poller?.cancel();
+    _poller = Timer.periodic(_pollInterval, (_) => _checkNew());
+  }
+
+  /// 未通知の低評価レビューをOSバナーで知らせ、バッジも更新する。
+  Future<void> _checkNew() async {
+    final fresh = await NotifStore.takeUnnotified();
+    if (fresh.isEmpty) return;
+    // 一度に大量に出さない。
+    for (final r in fresh.take(3)) {
+      await LocalNotifier.showLowRating(r);
+    }
+    if (!mounted) return;
+    if (_index == _notifIndex) {
+      // 通知タブを見ている最中なら既読のままにする。
+      await NotifStore.markSeenNow();
+      if (mounted) setState(() => _unread = 0);
+    } else {
       _refreshUnread();
     }
   }
