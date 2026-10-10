@@ -11,9 +11,9 @@ export default async function OnboardingPage() {
   // 未ログイン/未設定ならダッシュボード（サンプル表示）へ
   if (!user) redirect("/");
 
-  const db = createSupabaseServer();
+  const db = await createSupabaseServer();
   const [connected, { count: appCount }] = await Promise.all([
-    connectedStores(db, user.id),
+    connectedStores(user.id),
     db.from("apps").select("id", { count: "exact", head: true }),
   ]);
 
