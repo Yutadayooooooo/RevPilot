@@ -7,6 +7,7 @@ export const metadata: Metadata = {
 };
 
 const links = [
+  { href: "/pricing", label: "料金プラン" },
   { href: "/terms", label: "利用規約" },
   { href: "/privacy", label: "プライバシーポリシー" },
   { href: "/tokushoho", label: "特定商取引法に基づく表記" },

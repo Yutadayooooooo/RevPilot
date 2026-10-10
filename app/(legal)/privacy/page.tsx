@@ -29,12 +29,24 @@ export default function PrivacyPage() {
           <strong>暗号化して保管</strong>し、レビュー取得・返信投稿の目的にのみ使用します。
         </li>
         <li>
-          <strong>決済情報</strong>：サブスクリプションの状態。カード番号等の決済情報は決済事業者
-          （Stripe）またはアプリ内課金（Apple / Google）が取得・管理し、
-          <strong>当方はカード情報を保持しません</strong>。
+          <strong>決済情報</strong>：サブスクリプションの状態、および購入を識別するための
+          トランザクションID（Apple）／購入トークン（Google）。カード番号等の支払い情報は
+          アプリ内課金（Apple / Google）が取得・管理し、
+          <strong>当方は支払い情報を保持しません</strong>。
         </li>
         <li>
-          <strong>利用ログ</strong>：機能の利用状況、エラー情報等（品質改善のため）。
+          <strong>通知設定</strong>：利用者が任意で登録する Slack / Discord の Webhook URL、
+          および通知の対象範囲の設定。
+        </li>
+        <li>
+          <strong>端末の通知トークン</strong>：プッシュ通知の送信先を特定するための識別子
+          （Firebase Cloud Messaging の登録トークン）。通知を許可された場合にのみ取得し、
+          ログアウト・退会時、および無効になった時点で削除します。
+          端末の広告IDや位置情報は取得しません。
+        </li>
+        <li>
+          <strong>利用ログ</strong>：機能の利用状況、AI機能の利用回数、エラー情報等
+          （品質改善および利用上限の管理のため）。
         </li>
       </UL>
 
@@ -57,16 +69,22 @@ export default function PrivacyPage() {
           <strong>Supabase</strong>（データベース・認証基盤）
         </li>
         <li>
-          <strong>Stripe</strong>（決済処理）
-        </li>
-        <li>
           <strong>Anthropic（Claude API）</strong>：AI返信文案の生成のため、対象レビューの本文等を送信します。
         </li>
         <li>
-          <strong>Apple / Google</strong>：レビュー取得・返信投稿のための各ストアAPI、およびアプリ内課金。
+          <strong>Apple / Google</strong>：レビュー取得・返信投稿のための各ストアAPI、および
+          アプリ内課金（購入の有効性を確認するため、購入識別子を各社のAPIに送信します）。
         </li>
         <li>
-          <strong>メール送信サービス</strong>：通知メールの配信のため。
+          <strong>メール送信サービス（Resend）</strong>：通知メール・週次サマリーの配信のため。
+        </li>
+        <li>
+          <strong>Firebase Cloud Messaging（Google）</strong>：プッシュ通知の配信のため、
+          端末の通知トークンと通知本文（アプリ名・評価・レビュー本文の冒頭）を送信します。
+        </li>
+        <li>
+          <strong>Slack / Discord</strong>：利用者が通知先としてWebhook URLを設定した場合に限り、
+          新着レビューの概要を当該サービスへ送信します。
         </li>
       </UL>
       <P>
@@ -110,7 +128,7 @@ export default function PrivacyPage() {
         <li>連絡先：{BUSINESS.email}</li>
       </UL>
 
-      <LegalFooter updated="2026年8月6日" />
+      <LegalFooter updated="2026年9月7日" />
     </>
   );
 }
