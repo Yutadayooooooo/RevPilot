@@ -44,5 +44,5 @@ export async function resolveApiAuth(req: NextRequest): Promise<ApiAuth | null> 
   // Webのcookieセッション
   const user = await getCurrentUser();
   if (!user) return null;
-  return { user, db: createSupabaseServer() };
+  return { user, db: await createSupabaseServer() };
 }

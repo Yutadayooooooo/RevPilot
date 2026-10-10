@@ -7,8 +7,9 @@ type CookieToSet = { name: string; value: string; options: CookieOptions };
  * サーバーコンポーネント / ルートハンドラ用の Supabase クライアント。
  * ログインユーザーのセッション(cookie)に基づき、RLSが自動でデータをスコープする。
  */
-export function createSupabaseServer() {
-  const cookieStore = cookies();
+export async function createSupabaseServer() {
+  // Next.js 15 から cookies() は非同期。await しないと実行時に例外になる。
+  const cookieStore = await cookies();
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -37,7 +38,7 @@ export function authConfigured(): boolean {
 /** 現在のログインユーザー（未ログイン/未設定なら null） */
 export async function getCurrentUser() {
   if (!authConfigured()) return null;
-  const supabase = createSupabaseServer();
+  const supabase = await createSupabaseServer();
   const {
     data: { user },
   } = await supabase.auth.getUser();
