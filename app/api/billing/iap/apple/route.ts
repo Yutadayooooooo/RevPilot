@@ -11,10 +11,10 @@ export const runtime = "nodejs";
  * Stripe Webhook と同じ「サーバーが真実」の役割をIAPに対して担う。
  *
  * body: { productId, transactionId?, verificationData? }
- *   - productId: 購入した商品ID（プランに対応）
- *   - verificationData: in_app_purchase の serverVerificationData（本番検証で使用）
  *
- * 検証は lib/iap-apple.ts に集約。鍵未設定の本番では 501（穏やかに縮退）。
+ * 検証は lib/iap-apple.ts に集約（App Store Server API に問い合わせて確定する）。
+ * 失効はサーバー通知(/api/billing/iap/apple/notifications)と
+ * cron の定期チェックの二重で反映する。
  */
 export async function POST(req: NextRequest) {
   const auth = await resolveApiAuth(req);
@@ -44,15 +44,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
   }
 
-  // 検証済みプランを反映。RLSでの自己更新は不正操作の余地があるため service_role で確定する。
   const db = serviceClient();
+
+  // 同じ購入が別アカウントに紐づいていないか確認する。
+  // これが無いと、1件のサブスクを復元して回るだけで複数アカウントを有料化できる。
+  if (result.originalTransactionId) {
+    const { data: existing } = await db
+      .from("profiles")
+      .select("id")
+      .eq("apple_original_transaction_id", result.originalTransactionId)
+      .maybeSingle();
+    if (existing && existing.id !== user.id) {
+      return NextResponse.json(
+        { error: "この購入は別のアカウントで利用中です。購入時のApple IDと同じアカウントでログインしてください。" },
+        { status: 409 }
+      );
+    }
+  }
+
+  // 検証済みプランを反映。RLSでの自己更新は塞いであるので、必ずここ(service_role)で確定する。
   const { error } = await db
     .from("profiles")
-    .update({ plan: result.plan, plan_status: "iap_active" })
+    .update({
+      plan: result.plan,
+      plan_status: "iap_active",
+      apple_original_transaction_id: result.originalTransactionId,
+      apple_expires_at: result.expiresAt?.toISOString() ?? null,
+      current_period_end: result.expiresAt?.toISOString() ?? null,
+    })
     .eq("id", user.id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, plan: result.plan, method: result.method });
+  return NextResponse.json({
+    ok: true,
+    plan: result.plan,
+    method: result.method,
+    expiresAt: result.expiresAt?.toISOString() ?? null,
+  });
 }

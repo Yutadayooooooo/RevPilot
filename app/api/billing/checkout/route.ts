@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { resolveApiAuth } from "@/lib/supabase/api-auth";
+import { serviceClient } from "@/lib/supabase";
 import { getStripe, isPurchasablePlan, priceIdForPlan, siteUrl, type PlanKey } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +46,10 @@ export async function POST(req: NextRequest) {
       metadata: { userId: user.id },
     });
     customerId = customer.id;
-    await db.from("profiles").upsert(
+    // profiles への書き込みは service_role で行う。
+    // RLS は select のみに絞ってあるので、ユーザーのクライアントでは更新できない
+    // （plan や stripe_customer_id を自分で書き換えられないようにするため）。
+    await serviceClient().from("profiles").upsert(
       { id: user.id, email: user.email ?? null, stripe_customer_id: customerId },
       { onConflict: "id" }
     );

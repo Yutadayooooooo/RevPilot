@@ -1,92 +1,17 @@
 import Stripe from "stripe";
+import { PLANS, PUBLIC_PLANS, type PlanDef, type PlanKey } from "./plans";
 
 /**
  * Stripe（サブスク課金）クライアントと設定。
  * STRIPE_SECRET_KEY が無い環境（ローカルのサンプル表示など）では null を返し、
  * UI/API は「課金未設定」として穏やかに縮退する。
+ *
+ * 【注意】このモジュールは Stripe の Node SDK を読み込むのでサーバー専用。
+ * クライアントコンポーネントからプラン定義を読みたい場合は lib/plans.ts を使うこと。
  */
 
-export type PlanKey = "free" | "pro" | "max" | "team";
-
-export interface PlanDef {
-  key: PlanKey;
-  name: string;
-  /** 表示用の価格ラベル */
-  price: string;
-  features: string[];
-  /** 中央（センターステージ）に置く推し。3層GBBの中間を最有力にする。 */
-  popular?: boolean;
-  /** individual=個人向け3層 / team=別セグメント（法人・チーム向け） */
-  segment?: "individual" | "team";
-  /** 販売停止中（UIに出さない）。既存契約のために定義だけ残すプラン。 */
-  hidden?: boolean;
-  /** Stripe の price ID を入れた環境変数名（free は課金なし） */
-  priceEnv?: "STRIPE_PRICE_PRO" | "STRIPE_PRICE_MAX" | "STRIPE_PRICE_TEAM";
-}
-
-/**
- * 個人開発者向けの Good-Better-Best 3層。
- * - 競合(Appbot $49~ / AppFollow $99~)より大幅に安価に設定（インディー価格）。
- * - 一括返信を段階的な価値軸に：Free=1件ずつ / Pro=最大20件 / Max=全件一括。
- * - Pro を「おすすめ」にしてセンターステージ効果で中間を最有力に。
- */
-export const PLANS: PlanDef[] = [
-  {
-    key: "free",
-    name: "Free",
-    price: "¥0",
-    features: ["1アプリ", "AI返信 月5件", "返信は1件ずつ", "自動取得 毎時"],
-  },
-  {
-    key: "pro",
-    name: "Pro",
-    price: "¥1,480/月",
-    popular: true,
-    features: [
-      "5アプリまで",
-      "AI返信 月500件",
-      "一括返信 最大20件",
-      "自動取得 毎時",
-      "トピック分析",
-      "週次サマリー",
-    ],
-    priceEnv: "STRIPE_PRICE_PRO",
-  },
-  {
-    key: "max",
-    name: "Max",
-    price: "¥2,980/月",
-    segment: "individual",
-    features: [
-      "アプリ無制限",
-      "AI返信 無制限（公正利用 月2,000件）",
-      "全レビュー 一括返信",
-      "自動取得 毎時",
-      "トピック分析",
-      "週次サマリー",
-    ],
-    priceEnv: "STRIPE_PRICE_MAX",
-  },
-  // 販売停止中。共有・権限・まとめて請求が未実装のため公開しない（未実装機能の販売は
-  // 景表法／ストア審査の両面でリスク）。実装が入るまで hidden のままにする。
-  {
-    key: "team",
-    name: "Team",
-    price: "¥5,800/月",
-    segment: "team",
-    hidden: true,
-    features: [
-      "Maxの全機能",
-      "複数メンバーで共有",
-      "メンバー別の権限・履歴",
-      "まとめて請求",
-    ],
-    priceEnv: "STRIPE_PRICE_TEAM",
-  },
-];
-
-/** 公開中（購入可能）のプランのみ。UIはこちらを使う。 */
-export const PUBLIC_PLANS: PlanDef[] = PLANS.filter((p) => !p.hidden);
+export type { PlanDef, PlanKey };
+export { PLANS, PUBLIC_PLANS };
 
 /** 販売中のプランか（非公開プランの新規購入を止める） */
 export function isPurchasablePlan(plan: PlanKey): boolean {
