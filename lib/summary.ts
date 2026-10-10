@@ -87,6 +87,33 @@ function deltaLabel(s: WeeklySummary): string {
   return `${arrow} ${d >= 0 ? "+" : ""}${d.toFixed(2)}`;
 }
 
+/**
+ * 週次サマリーをプッシュ通知の文面にする。
+ *
+ * メール版と違って長文は載せられない（OSが数行で切る）ので、
+ * 「見出しで件数、本文で平均評価と要対応の有無」まで分かれば十分とし、
+ * 詳細はアプリを開いて見てもらう。
+ *
+ * メール配信には独自ドメインの認証が要る（Resendは未認証ドメインから
+ * 他人宛に送れない）が、プッシュはFCMだけで完結するため追加費用なしで届く。
+ */
+export function renderSummaryPush(s: WeeklySummary): { title: string; body: string } {
+  const title = `週次サマリー｜レビュー${s.totalThisWeek}件`;
+
+  const lines = [
+    `平均★${fmtAvg(s.avgThisWeek)}（先週 ${fmtAvg(s.avgLastWeek)}）${
+      deltaLabel(s) ? " " + deltaLabel(s) : ""
+    }`,
+  ];
+  if (s.low.length) lines.push(`要対応の低評価 ${s.low.length}件`);
+  if (s.topTopics.length) {
+    lines.push(
+      "要望: " + s.topTopics.map((t) => `${TOPIC_JP[t.topic] ?? t.topic}${t.count}件`).join("・")
+    );
+  }
+  return { title, body: lines.join("\n") };
+}
+
 export function renderSummaryText(s: WeeklySummary): string {
   const lines = [
     "RevPilot 週次サマリー",
