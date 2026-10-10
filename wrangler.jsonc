@@ -1,0 +1,49 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // Worker名がそのままURLになる: https://app.<アカウントのサブドメイン>.workers.dev
+  // サブドメインを "revpilot" にしてあるので https://app.revpilot.workers.dev
+  "name": "app",
+  "main": ".open-next/worker.js",
+
+  // nodejs_compat: lib/crypto.ts の AES-256-GCM、jsonwebtoken の ES256 署名、
+  //   google-auth-library（FCM）が node:crypto を使うため必須。
+  //   2026-10-09 に wrangler dev 上で4つとも動作確認済み。
+  // global_fetch_strictly_public: アプリ内から自分自身のURLへ fetch できるようにする。
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "app"
+    }
+  ],
+
+  // 公開しても問題ない値だけここに置く（このファイルはGitに入る）。
+  // 秘密（SUPABASE_SERVICE_ROLE_KEY / ANTHROPIC_API_KEY / APPLE_IAP_PRIVATE_KEY /
+  // FIREBASE_SERVICE_ACCOUNT_JSON など）は `wrangler secret put` で入れる。
+  // → scripts/cf-secrets.sh
+  //
+  // 【注意】NEXT_PUBLIC_* は Next.js がビルド時に埋め込む。ここに書いても
+  // ビルド時に .env.local が無ければ値は入らない。ローカルでビルドする前提。
+  "vars": {
+    "NEXT_PUBLIC_SITE_URL": "https://app.revpilot-jp.workers.dev",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://cpyadwzsntcpianligej.supabase.co",
+    "SUPABASE_URL": "https://cpyadwzsntcpianligej.supabase.co",
+    "ANTHROPIC_MODEL": "claude-sonnet-5",
+    "APPLE_IAP_BUNDLE_ID": "jp.revpilot.app",
+    "GOOGLE_PLAY_PACKAGE_NAME": "jp.revpilot.app",
+    "OPERATOR_ALERT_EMAIL": "revpilot.hq@gmail.com"
+  },
+
+  // 無料枠に収めるため、観測用のログは既定のまま（Workers Logs の無料枠内）。
+  "observability": {
+    "enabled": true
+  }
+}

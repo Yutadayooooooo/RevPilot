@@ -24,6 +24,10 @@ export const BUSINESS = {
 
 /**
  * 本番サイトURL。デプロイ時に NEXT_PUBLIC_SITE_URL で上書きする。
- * 既定は Vercel の無料ドメイン想定。実際のサブドメインが異なる場合は環境変数で設定すること。
+ *
+ * ホストは Cloudflare Workers（無料プラン）。
+ * workers.dev のサブドメインは `<Worker名>.<アカウントのサブドメイン>.workers.dev` の形で、
+ * Worker名 `app` / アカウントのサブドメイン `revpilot-jp`。
+ * （`revpilot` は他アカウントが取得済みだったため `-jp` 付き。2026-10-09 確認）
  */
-export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://revpilot.vercel.app").replace(/\/$/, "");
+export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://app.revpilot-jp.workers.dev").replace(/\/$/, "");

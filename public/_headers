@@ -1,0 +1,5 @@
+# Next.js のビルド成果物はファイル名にハッシュが入るので、永久キャッシュで安全。
+# Cloudflare の静的アセット配信はWorkerのCPU時間を消費しないため、
+# 無料枠（CPU 10ms）に収めるうえでも効く。
+/_next/static/*
+  Cache-Control: public,max-age=31536000,immutable

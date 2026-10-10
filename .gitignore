@@ -33,3 +33,13 @@ next-env.d.ts
 # secrets / store credentials (never commit)
 *.p8
 service-account*.json
+
+# 秘密鍵置き場（.p8 / サービスアカウントJSON）。中身は絶対にコミットしない。
+/secrets/
+.env*
+
+# OpenNext (Cloudflare) のビルド成果物
+.open-next/
+.wrangler/
+.dev.vars
+cloudflare-env.d.ts
