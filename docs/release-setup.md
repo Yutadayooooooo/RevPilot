@@ -980,27 +980,24 @@ Android では内部テスターアカウントでご確認いただけます。
       ※ 公開リポジトリは60日コミットが無いと Actions が自動停止する。
         止まると Supabase 無料枠の「1週間アクセスが無いと一時停止」に連鎖するので、
         月1回でもコミットすること。
-- [ ] `RESEND_API_KEY` / `RESEND_FROM` を取得して投入する（**未取得・リリース阻害**）
-      未設定だと `lib/notify.ts:104` が黙って `false` を返し、メールは1通も出ない。
-      ところが `docs/store-listing.md:66` は Pro の特典に「週次サマリー」、同:46 は通知先に「メール」と書いている。
-      → **有料機能が動かないまま出荷することになる**。
+- [ ] （任意）`RESEND_API_KEY` / `RESEND_FROM` を取得して投入する — **リリース阻害ではなくなった**
+      2026-10-10 に週次サマリーの配信をメールからプッシュ通知に変更したため
+      （`app/api/cron/weekly/route.ts`）。メールが無くても Pro の特典は成立する。
+      掲載文と App Store Connect の「概要」からも通知先としての「メール」を削除済み。
 
-      【2026-10-10 判明：独自ドメインが要る】
+      【メールにドメインが要る理由】
       Resend は「送信するには最低1つのドメインを追加・認証する必要がある」としており、
-      未認証のうちは `onboarding@resend.dev` から **Resend アカウント自身のメールアドレス宛にしか送れない**
+      未認証のうちは `onboarding@resend.dev` から
+      **Resend アカウント自身のメールアドレス宛にしか送れない**
       （他人宛は 403 `You can only send testing emails to your own email address`）。
-      RevPilot は `app.revpilot-jp.workers.dev` を使っていて独自ドメインを持っていないため、
-      **現状のままでは利用者宛の週次サマリーは送れない**。
+      RevPilot は `app.revpilot-jp.workers.dev` で独自ドメインを持たない。
 
-      切り分け：
-      - **障害通知（`OPERATOR_ALERT_EMAIL=revpilot.hq@gmail.com` 宛）だけ**なら、
-        revpilot.hq@gmail.com で Resend に登録し `RESEND_FROM=onboarding@resend.dev` にすれば
-        ドメイン無し・無料で動く（宛先が自分自身なので403にならない）。
-      - **利用者宛の週次サマリー**は独自ドメインの取得と DNS 認証が必須。
-        → ドメインを買う（Cloudflare Registrar 等）か、掲載文から「週次サマリー」「メール」を外すかの判断。
+      いま設定するとしたら、運営向けの障害通知（`OPERATOR_ALERT_EMAIL=revpilot.hq@gmail.com`）だけ。
+      revpilot.hq@gmail.com で Resend に登録し `RESEND_FROM=onboarding@resend.dev` にすれば、
+      宛先が自分自身なのでドメイン無し・無料で動く。
+      利用者宛のメールを出したくなったら独自ドメインの取得とDNS認証が要る。
+      なお `revpilot.app` / `revpilot.com` / `revpilot.dev` は他者が登録済み（2026-10-10 時点）。
 
-      なお `app/api/cron/weekly/route.ts:83` は送信失敗時に `weekly_summary_sent_at` を更新しないため、
-      後から設定すれば取りこぼしは自動で回収される（データ欠損は起きない）。
 - [x] 公開ページの死活監視を毎時のワークフローに入れた（`Check public pages`。`/`・法務3種・`/pricing` が 200 以外ならGitHubから通知メールが届く）
 - [ ] 通知が来たら Workers Paid（$5/月）に上げる（ダッシュボードのプラン変更のみ。コード・`wrangler.jsonc`・再デプロイは不要。2-2 参照）
 

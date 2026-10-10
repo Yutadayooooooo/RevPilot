@@ -43,7 +43,7 @@ RevPilot は、個人開発者のためのアプリレビュー管理ツール�
 
 ■ レビューをまとめて監視
 App Store と Google Play のレビューを一つの受信箱に集約。毎時自動で取得し、
-新着があればプッシュ通知でお知らせします（メール／Slack・Discordにも配信できます）。
+新着があればプッシュ通知でお知らせします（Slack・Discordにも配信できます）。
 
 ■ Google Play の消えるレビューを履歴に
 Google Play のAPIは直近7日ぶんのレビューしか返しません。RevPilot は定期取得して
