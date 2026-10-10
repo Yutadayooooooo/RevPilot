@@ -3,7 +3,7 @@ import { Inbox, LayoutDashboard, BarChart3, Settings, Plane, LogOut } from "luci
 import { getCurrentUser } from "@/lib/supabase/server";
 
 const nav = [
-  { href: "/", label: "概要", icon: LayoutDashboard },
+  { href: "/dashboard", label: "概要", icon: LayoutDashboard },
   { href: "/inbox", label: "統合インボックス", icon: Inbox },
   { href: "/analytics", label: "分析", icon: BarChart3 },
   { href: "/settings", label: "設定", icon: Settings },
