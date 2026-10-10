@@ -18,6 +18,19 @@ export interface ReviewForAI {
   territory?: string | null;
 }
 
+/**
+ * 入力トークン数を有界にするための切り詰め。
+ * ストアのレビュー本文は理論上かなり長く、そのまま渡すと1件あたりの原価が
+ * 見積もり（lib/plan.ts の AI_UNITS）から外れるため、上限を設ける。
+ */
+const MAX_BODY_CHARS = 1_200;
+const MAX_TITLE_CHARS = 200;
+
+function clip(s: string | null | undefined, max: number): string {
+  const t = (s ?? "").trim();
+  return t.length <= max ? t : `${t.slice(0, max)}…`;
+}
+
 /** レビューへの返信ドラフトを生成（レビューと同じ言語で返す） */
 export async function draftReply(
   review: ReviewForAI,
@@ -39,8 +52,8 @@ export async function draftReply(
         role: "user",
         content:
           `★${review.rating}\n` +
-          `タイトル: ${review.title ?? ""}\n` +
-          `本文: ${review.body ?? ""}\n` +
+          `タイトル: ${clip(review.title, MAX_TITLE_CHARS)}\n` +
+          `本文: ${clip(review.body, MAX_BODY_CHARS)}\n` +
           `地域: ${review.territory ?? ""}`,
       },
     ],
@@ -61,7 +74,10 @@ export async function classifyTopics(review: ReviewForAI): Promise<Topic[]> {
       `レビューを次のトピックに分類し、該当するものをカンマ区切りで返す。` +
       `候補: ${TOPICS.join(", ")}。該当ラベルのみ出力し他の語は書かない。`,
     messages: [
-      { role: "user", content: `★${review.rating}\n${review.title ?? ""}\n${review.body ?? ""}` },
+      {
+        role: "user",
+        content: `★${review.rating}\n${clip(review.title, MAX_TITLE_CHARS)}\n${clip(review.body, MAX_BODY_CHARS)}`,
+      },
     ],
   });
   const block = msg.content.find((b) => b.type === "text");

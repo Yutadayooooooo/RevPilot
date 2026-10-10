@@ -1,0 +1,65 @@
+#
+# 週次サマリーメールの配信トリガ。
+#
+# 【なぜ GitHub Actions なのか】
+# ホストが Vercel だった頃は vercel.json の cron が叩いていたが、
+# Cloudflare Workers へ移行したため vercel.json はもう実行されない。
+# さらに Workers 無料プランは「1リクエストあたり外部サブリクエスト50回」なので、
+# 全員ぶんを1リクエストでは送れない。1回8人ずつに区切り、
+# 「まだ対象が残っている」間だけ繰り返す。
+#
+# 進捗は profiles.weekly_summary_sent_at に記録されるので、
+# 途中で止まっても次の実行が続きから再開する。
+#
+# 【必要なリポジトリシークレット】
+#   REVPILOT_WEEKLY_URL   例: https://app.revpilot.workers.dev/api/cron/weekly
+#   REVPILOT_CRON_SECRET  Cloudflare の環境変数 CRON_SECRET と同じ値
+#
+name: Weekly summary
+
+on:
+  schedule:
+    - cron: "0 0 * * 1" # 毎週月曜 00:00 UTC（日本時間 月曜 09:00）
+  workflow_dispatch: {}
+
+concurrency:
+  group: revpilot-weekly
+  cancel-in-progress: false
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Send weekly summaries
+        env:
+          URL: ${{ secrets.REVPILOT_WEEKLY_URL }}
+          SECRET: ${{ secrets.REVPILOT_CRON_SECRET }}
+        run: |
+          set -u
+          if [ -z "${URL:-}" ] || [ -z "${SECRET:-}" ]; then
+            echo "::error::REVPILOT_WEEKLY_URL / REVPILOT_CRON_SECRET が未設定です"
+            exit 1
+          fi
+
+          sent_total=0
+          # 上限を設けて無限ループを防ぐ（8人 × 50回 = 400人ぶん）。
+          for i in $(seq 1 50); do
+            code=$(curl -sS -o /tmp/weekly.json -w '%{http_code}' \
+              --max-time 120 --retry 1 --retry-delay 10 \
+              -X POST "$URL" -H "Authorization: Bearer $SECRET")
+            if [ "$code" != "200" ]; then
+              echo "::error::週次サマリーの送信に失敗しました (HTTP $code)"
+              cat /tmp/weekly.json; echo
+              exit 1
+            fi
+            sent=$(python3 -c "import json;print(json.load(open('/tmp/weekly.json')).get('sent',0))")
+            more=$(python3 -c "import json;print(json.load(open('/tmp/weekly.json')).get('maybeMore',False))")
+            sent_total=$((sent_total+sent))
+            echo "  バッチ $i: 送信 $sent 件 / 続きあり=$more"
+            if [ "$more" != "True" ]; then
+              break
+            fi
+          done
+
+          echo "送信合計: $sent_total 件"

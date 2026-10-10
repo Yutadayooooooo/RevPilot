@@ -12,8 +12,14 @@ export const runtime = "nodejs";
  *
  * - Web cookie / モバイル Bearer 両対応（resolveApiAuth）。
  * - 進行中の Stripe サブスクがあればベストエフォートで解約（請求が残らないように）。
- * - auth.users を削除すると profiles / apps / reviews / store_credentials などは
+ * - auth.users を削除すると profiles / apps / reviews / replies / review_topics /
+ *   store_credentials / ai_usage / rate_limits / poll_state は
  *   スキーマの on delete cascade で連鎖削除される（supabase/schema.sql 参照）。
+ *
+ * 【Apple IAP について】
+ * App内課金のサブスクリプションは Apple の管理下にあり、サーバーからは解約できない。
+ * 利用者には「設定 > Apple ID > サブスクリプション」から解約するようUI側で案内している
+ * （mobile/lib/screens/settings_screen.dart, components/danger-zone.tsx）。
  */
 export async function DELETE(req: NextRequest) {
   const auth = await resolveApiAuth(req);

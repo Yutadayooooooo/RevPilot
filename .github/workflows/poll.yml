@@ -1,0 +1,134 @@
+#
+# 毎時のレビュー取得トリガ。
+#
+# 【なぜ GitHub Actions なのか】
+# ホストは Cloudflare Workers（無料プラン）。Workers の Cron Triggers でも毎時は
+# 動かせるが、無料プランは「1リクエストあたり外部サブリクエスト50回 / CPU 10ms」
+# なので、1回の起動で全アプリを巡回する作りはそもそも成立しない。
+# アプリ1本ごとに別リクエストへ分ける必要があり、その「束ねる側」を
+# 無料で持てるのが GitHub Actions（パブリックリポジトリは実行時間無料）。
+#
+# 【2段構え】
+#   1. body 無しで /api/cron/poll を叩く → 期限切れサブスクの反映 + 対象アプリID一覧
+#   2. IDごとに {"appId": "..."} を付けて叩く → 1リクエスト＝1アプリ
+#
+# 【必要なリポジトリシークレット】
+#   REVPILOT_CRON_URL     例: https://app.revpilot.workers.dev/api/cron/poll
+#   REVPILOT_CRON_SECRET  Cloudflare の環境変数 CRON_SECRET と同じ値
+#
+# 【注意】GitHub Actions のスケジュールは実行が数分〜十数分ずれることがある。
+# また、パブリックリポジトリでは60日間コミットが無いと自動で無効化されるため、
+# 長期間放置する場合は Actions 画面から再有効化すること。
+#
+name: Poll store reviews
+
+on:
+  schedule:
+    - cron: "5 * * * *" # 毎時5分（正時ちょうどは混み合うのでずらす）
+  workflow_dispatch: {}
+
+concurrency:
+  group: revpilot-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # 公開ページの死活監視。
+      #
+      # 【なぜここでやるか】
+      # Workers 無料プランのCPU上限は 10ms/リクエストだが、実測のP50は約21msで
+      # 恒常的に超えている。Cloudflare は「稀な超過は許容するが、継続的に上限に
+      # 当たり続ける Worker は実行を打ち切る」としており、その場合 Error 1102 を返す。
+      # 打ち切られて真っ先に困るのが、App Store に登録したプライバシーポリシーURL
+      # （審査で踏まれる / 落ちていると審査に通らない）。
+      # 無料プランのまま運用するなら「落ちたら気づける」ことが前提条件なので、
+      # すでに毎時動いているこのワークフローに相乗りさせる。
+      # 失敗すると GitHub から通知メールが届く → Workers Paid($5/月)へ上げる判断ができる。
+      #
+      # 追加負荷は 5リクエスト×24回=120/日（無料枠は 100,000/日）。
+      - name: Check public pages
+        env:
+          URL: ${{ secrets.REVPILOT_CRON_URL }}
+        run: |
+          set -u
+          # REVPILOT_CRON_URL は .../api/cron/poll なので、オリジンだけ取り出す。
+          origin=$(printf '%s' "$URL" | sed -E 's#^(https?://[^/]+).*#\1#')
+          if [ -z "$origin" ]; then
+            echo "::error::REVPILOT_CRON_URL が未設定です"
+            exit 1
+          fi
+
+          ng=0
+          for path in / /privacy /terms /tokushoho /pricing; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' \
+              --max-time 30 --retry 2 --retry-delay 5 "$origin$path" || echo 000)
+            echo "  $path -> HTTP $code"
+            if [ "$code" != "200" ]; then
+              ng=$((ng+1))
+            fi
+          done
+
+          if [ "$ng" != "0" ]; then
+            echo "::error::公開ページ $ng 件が 200 を返しません。1102 ならCPU上限（Workers Paid への切替を検討）、それ以外はデプロイを確認してください"
+            exit 1
+          fi
+
+      - name: Trigger review polling
+        env:
+          URL: ${{ secrets.REVPILOT_CRON_URL }}
+          SECRET: ${{ secrets.REVPILOT_CRON_SECRET }}
+        run: |
+          set -u
+          if [ -z "${URL:-}" ] || [ -z "${SECRET:-}" ]; then
+            echo "::error::REVPILOT_CRON_URL / REVPILOT_CRON_SECRET が未設定です"
+            exit 1
+          fi
+
+          # --- 1段目: 対象一覧を取得 ---
+          code=$(curl -sS -o /tmp/due.json -w '%{http_code}' \
+            --max-time 60 --retry 2 --retry-delay 10 \
+            -X POST "$URL" -H "Authorization: Bearer $SECRET")
+          echo "一覧取得: HTTP $code"
+          cat /tmp/due.json; echo
+          if [ "$code" != "200" ]; then
+            echo "::error::対象一覧の取得に失敗しました (HTTP $code)"
+            exit 1
+          fi
+
+          ids=$(python3 -c "import json;print('\n'.join(json.load(open('/tmp/due.json')).get('appIds') or []))")
+          if [ -z "$ids" ]; then
+            echo "今回の対象アプリはありません"
+            exit 0
+          fi
+          echo "対象アプリ数: $(echo "$ids" | wc -l | tr -d ' ')"
+
+          # --- 2段目: 1アプリずつ ---
+          # 直列で回す。Workers無料枠の同時接続数(6)とストア側のレート上限に対して
+          # 余計な負荷をかけず、失敗したアプリを特定しやすい。
+          failed=0
+          inserted_total=0
+          while IFS= read -r id; do
+            [ -z "$id" ] && continue
+            code=$(curl -sS -o /tmp/one.json -w '%{http_code}' \
+              --max-time 120 --retry 1 --retry-delay 5 \
+              -X POST "$URL" -H "Authorization: Bearer $SECRET" \
+              -H 'Content-Type: application/json' \
+              -d "{\"appId\":\"$id\"}")
+            n=$(python3 -c "import json;print(json.load(open('/tmp/one.json')).get('inserted',0))" 2>/dev/null || echo 0)
+            echo "  $id -> HTTP $code (新着 $n 件)"
+            if [ "$code" != "200" ]; then
+              cat /tmp/one.json; echo
+              failed=$((failed+1))
+            else
+              inserted_total=$((inserted_total+n))
+            fi
+          done <<< "$ids"
+
+          echo "新着合計: $inserted_total 件 / 失敗: $failed 件"
+          if [ "$failed" != "0" ]; then
+            echo "::error::$failed 件のアプリで取得に失敗しました"
+            exit 1
+          fi

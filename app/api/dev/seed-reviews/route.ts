@@ -58,8 +58,9 @@ export async function POST(req: NextRequest) {
 
   // テスト用アプリを用意（衝突しない固定 store_app_id で冪等）。
   const testStoreAppId = "pipeline-test";
-  // plan も引く: ingestReviews のトピック分類がプラン依存になったため本番と同条件で通す。
-  const appSelect = "id, name, profiles(line_user_id, plan)";
+  // owner と plan も引く: ingestReviews の通知先とトピック分類（AI枠の消費）が
+  // オーナー依存になったため、本番と同条件で通す。
+  const appSelect = "id, name, owner, profiles(notify_webhook_url, email, plan)";
   let { data: app } = await db
     .from("apps")
     .select(appSelect)
