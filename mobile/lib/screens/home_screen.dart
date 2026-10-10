@@ -29,8 +29,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const _notifIndex = 1;
 
   /// 新着レビューを拾ってバナーを出す前景ポーリング。
-  /// （ローカル通知なのでアプリ起動中のみ。完全終了中の通知はリモートpushが必要）
-  static const _pollInterval = Duration(seconds: 30);
+  ///
+  /// アプリ終了中の通知はリモートpush([PushService])が担当する。
+  /// こちらは起動中に画面を開きっぱなしにしている間の即時性を担保するもので、
+  /// push が未設定（FIREBASE_* が空）の環境ではこれが唯一の通知経路になる。
+  ///
+  /// サーバー側の取得が毎時である以上、30秒間隔で問い合わせても新着が増えることはない。
+  /// 間隔を詰めるほど利用者の通信量とDBの転送量だけが増えるので、2分に緩める。
+  static const _pollInterval = Duration(minutes: 2);
   Timer? _poller;
 
   final _screens = const [

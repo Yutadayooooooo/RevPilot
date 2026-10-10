@@ -32,12 +32,22 @@ class NotifStore {
   }
 
   /// 通知対象を保存する。
+  ///
+  /// 端末内に加えてサーバー（profiles.push_scope）にも保存する。
+  /// リモートpushはサーバーが送るので、端末内だけに持っていると
+  /// 「★1〜2のみ」にしていても全件のpushが届いてしまう。
   static Future<void> setScope(NotifScope s) async {
+    final value = s == NotifScope.low ? 'low' : 'all';
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_scopeKey, s == NotifScope.low ? 'low' : 'all');
+      await prefs.setString(_scopeKey, value);
     } catch (_) {
       // 保存失敗時は既定（すべて）のままなので握りつぶす。
+    }
+    try {
+      await Repo.savePushScope(value);
+    } catch (_) {
+      // 通信失敗時は端末側だけ反映される。次回の切り替えで再送される。
     }
   }
 
@@ -77,13 +87,15 @@ class NotifStore {
   }
 
   /// 通知対象のレビューを新しい順で取得（フィード表示用に上限あり）。
+  ///
+  /// 軽量クエリを使う。ここは定期チェックから繰り返し呼ばれるので、
+  /// 一覧用の重いクエリを使うと通信量が積み上がる。
   static Future<List<ReviewRow>> targetReviews() async {
     final s = await scope();
-    final rows = await Repo.reviews(
+    return Repo.reviewsForNotify(
       ratings: s == NotifScope.low ? const [1, 2] : null,
-      sort: ReviewSort.newest,
+      limit: feedLimit,
     );
-    return rows.length <= feedLimit ? rows : rows.sublist(0, feedLimit);
   }
 
   /// まだバナーを出していないレビューを返し、同時に「通知済み」として記録する。

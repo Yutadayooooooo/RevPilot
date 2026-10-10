@@ -125,6 +125,15 @@ class _ConnectStoreScreenState extends State<ConnectStoreScreen> {
                   connected: _connected.contains('appstore'),
                   child: Column(
                     children: [
+                      // 鍵の取得は App Store Connect 側での作業で、ここが最大の詰まりどころ。
+                      // 手順を省略せずに書く。
+                      _steps(const [
+                        'App Store Connect > ユーザーとアクセス > 統合 を開く',
+                        '「App Store Connect API」で鍵を生成（App Manager以上の権限）',
+                        '生成直後に .p8 ファイルをダウンロード（再取得不可）',
+                        'Issuer ID とキーIDを下欄にコピー',
+                      ]),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: _issuerId,
                         decoration:
@@ -164,6 +173,13 @@ class _ConnectStoreScreenState extends State<ConnectStoreScreen> {
                   connected: _connected.contains('googleplay'),
                   child: Column(
                     children: [
+                      _steps(const [
+                        'Google Cloud でサービスアカウントを作成しJSONキーを発行',
+                        'Play Console > ユーザーと権限 でそのアカウントを招待',
+                        '対象アプリへのアクセスと「レビューの表示・返信」権限を付与',
+                        'JSONの中身を丸ごと下欄に貼り付け',
+                      ]),
+                      const SizedBox(height: 12),
                       TextField(
                         controller: _saJson,
                         maxLines: 6,
@@ -248,4 +264,49 @@ class _Spinner extends StatelessWidget {
       height: 20,
       width: 20,
       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));
+}
+
+/// 手順の箇条書き。連携は外部サービスでの作業を伴うので、画面内に手順を出す。
+Widget _steps(List<String> items) {
+  return Builder(
+    builder: (context) => Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.subtleSurfaceC,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < items.length; i++)
+            Padding(
+              padding: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${i + 1}. ',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: context.subtleC)),
+                  Expanded(
+                    child: Text(items[i],
+                        style: TextStyle(
+                            fontSize: 12, height: 1.5, color: context.subtleC)),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
+          Text('入力後、その場でストアへ疎通確認を行います。失敗した場合は保存されません。',
+              style: TextStyle(
+                  fontSize: 11,
+                  height: 1.4,
+                  fontStyle: FontStyle.italic,
+                  color: context.subtleC)),
+        ],
+      ),
+    ),
+  );
 }

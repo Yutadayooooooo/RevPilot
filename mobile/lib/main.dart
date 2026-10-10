@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
+import 'push.dart';
 import 'theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -14,13 +17,37 @@ Future<void> main() async {
   SystemChrome.setSystemUIOverlayStyle(AppTheme.overlayFor(brightness));
 
   if (AppConfig.isConfigured) {
+    // anonKey は非推奨（将来のメジャーバージョンで削除予定）。
+    // 値の意味は同じで、パラメータ名だけが publishableKey に変わっている。
     await Supabase.initialize(
       url: AppConfig.supabaseUrl,
-      anonKey: AppConfig.supabaseAnonKey,
+      publishableKey: AppConfig.supabaseAnonKey,
     );
+    await _setUpPush();
   }
 
   runApp(const RevPilotApp());
+}
+
+/// リモートpush（アプリを終了していても届く通知）の準備。
+///
+/// 端末トークンはログインしているユーザーに紐づけるので、
+/// 起動時のセッションと、以後のサインインの両方で登録する。
+/// Firebaseの設定が入っていなければ [PushService] 側で何もしない。
+Future<void> _setUpPush() async {
+  await PushService.init();
+  if (!PushService.configured) return;
+
+  final auth = Supabase.instance.client.auth;
+  if (auth.currentSession != null) {
+    // 起動をブロックしない（通知の許可ダイアログを待って白画面にしない）。
+    unawaited(PushService.registerForCurrentUser());
+  }
+  auth.onAuthStateChange.listen((state) {
+    if (state.event == AuthChangeEvent.signedIn) {
+      unawaited(PushService.registerForCurrentUser());
+    }
+  });
 }
 
 class RevPilotApp extends StatelessWidget {

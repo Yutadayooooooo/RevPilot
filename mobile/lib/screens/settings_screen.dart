@@ -8,6 +8,7 @@ import '../config.dart';
 import '../data.dart';
 import '../models.dart';
 import '../notifications.dart';
+import '../push.dart';
 import '../theme.dart';
 import '../ui.dart';
 import 'apps_screen.dart';
@@ -26,6 +27,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _refreshing = false;
   bool _deleting = false;
   NotifScope _notifScope = NotifScope.all;
+  bool _sendingTest = false;
 
   @override
   void initState() {
@@ -37,6 +39,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadNotifScope() async {
     final s = await NotifStore.scope();
     if (mounted) setState(() => _notifScope = s);
+  }
+
+  /// 自分の端末にテスト通知を送り、リモートpushが実際に届くか確かめる。
+  Future<void> _sendTestPush() async {
+    if (_sendingTest) return;
+    setState(() => _sendingTest = true);
+    try {
+      await Repo.sendTestPush();
+      if (mounted) {
+        showSnack(context, 'テスト通知を送信しました', kind: SnackKind.success);
+      }
+    } catch (e) {
+      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
+    } finally {
+      if (mounted) setState(() => _sendingTest = false);
+    }
   }
 
   /// 通知対象（すべて / ★1〜2のみ）を切り替える。
@@ -80,16 +98,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   /// 規約・ポリシー等をアプリ内ブラウザで開く。Web(Next.js)側で公開しているページ。
+  ///
+  /// APIのURL（開発中はLANのIPを指すことがある）ではなく WEB_URL を使う。
+  /// 規約ページがリンク切れだとストア審査で落ちるため。
   Future<void> _openLegal(String path) async {
-    if (!AppConfig.hasApi) {
-      showSnack(context, 'サーバーURLが未設定です（config/app_config.json）',
-          kind: SnackKind.error);
+    if (!AppConfig.hasWeb) {
+      showSnack(context, 'ページを開けませんでした', kind: SnackKind.error);
       return;
     }
-    final uri = Uri.parse('${AppConfig.apiBaseUrl}$path');
+    final uri = Uri.parse('${AppConfig.webUrl}$path');
     final ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
     if (!ok && mounted) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  /// 問い合わせ（メールアプリを開く）。有料サービスにサポート導線が無いのは避ける。
+  Future<void> _contact() async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: 'revpilot.hq@gmail.com',
+      queryParameters: {'subject': 'RevPilot お問い合わせ'},
+    );
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (mounted) {
+        showSnack(context, 'revpilot.hq@gmail.com までご連絡ください',
+            kind: SnackKind.info);
+      }
     }
   }
 
@@ -113,6 +148,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (ok == true) {
       HapticFeedback.mediumImpact();
+      // 通知先の解除は**サインアウトの前**に行う。
+      // 後だと認証が切れていて自分の端末を外せず、
+      // 同じ端末を使う次の利用者にこのアカウント宛の通知が届き続ける。
+      await PushService.unregister();
       await Supabase.instance.client.auth.signOut();
     }
   }
@@ -127,7 +166,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: const Text(
           'アカウントと、連携アプリ・取得したレビュー・返信・ストア連携などの'
           'すべてのデータが完全に削除されます。この操作は取り消せません。\n\n'
-          '有効なサブスクリプションがある場合は解約されます。',
+          'Webでご契約のサブスクリプションは自動的に解約されます。\n'
+          'App Store のアプリ内課金でご契約中の場合は、Appleの仕様上こちらから解約できません。'
+          '「設定 > Apple ID > サブスクリプション」から必ず解約してください。',
         ),
         actions: [
           TextButton(
@@ -145,6 +186,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _deleting = true);
     try {
+      await PushService.unregister();
       await Repo.deleteAccount();
       HapticFeedback.heavyImpact();
       // 削除済みユーザーはサーバーサインアウトが失敗し得るためローカルで確実にセッション破棄。
@@ -258,19 +300,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: const Text('★1〜2のときだけ通知する'),
                   subtitle: Text(
                     _notifScope == NotifScope.low
-                        ? '低評価レビューだけバナーでお知らせします'
-                        : 'すべての新着レビューをバナーでお知らせします',
+                        ? '★1〜2のレビューだけお知らせします'
+                        : 'すべての新着レビューをお知らせします',
                     style: const TextStyle(fontSize: 12),
                   ),
                   value: _notifScope == NotifScope.low,
                   onChanged: _setNotifScope,
                 ),
+                // 届くかどうかは実際に送ってみないと分からない。
+                // 通知の許可を拒否している・鍵の設定が誤っている場合は
+                // どれも無言で失敗するので、確認手段を UI に置く。
+                if (PushService.configured) ...[
+                  _divider(),
+                  _navTile(
+                    icon: Icons.notifications_none,
+                    title: _sendingTest ? '送信中…' : 'テスト通知を送る',
+                    subtitle: 'この端末に通知が届くか確認します',
+                    onTap: _sendingTest ? () {} : _sendTestPush,
+                  ),
+                ],
               ]),
               const SizedBox(height: 16),
 
               // 情報・法務
-              _sectionLabel('情報'),
+              _sectionLabel('情報・サポート'),
               _navCard([
+                _navTile(
+                  icon: Icons.mail_outline,
+                  title: 'お問い合わせ',
+                  subtitle: 'revpilot.hq@gmail.com',
+                  onTap: _contact,
+                ),
+                _divider(),
+                _navTile(
+                  icon: Icons.sell_outlined,
+                  title: '料金プラン',
+                  subtitle: '',
+                  onTap: () => _openLegal('/pricing'),
+                ),
+                _divider(),
                 _navTile(
                   icon: Icons.description_outlined,
                   title: '利用規約',

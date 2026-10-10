@@ -1,4 +1,4 @@
-package com.revpilot.revpilot_mobile
+package jp.revpilot.app
 
 import io.flutter.embedding.android.FlutterActivity
 

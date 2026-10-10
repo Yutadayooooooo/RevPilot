@@ -87,8 +87,18 @@ class ReviewRow {
     this.appName,
   });
 
+  /// 下書きを含めて何らかの返信があるか（一覧のバッジ表示用）。
   bool get hasReply => replies.isNotEmpty;
+
+  /// ストアへ投稿済みか。
   bool get isPosted => replies.any((r) => r.status == 'posted');
+
+  /// まだストアに返信していない＝対応が必要なレビュー。
+  ///
+  /// 一括返信の対象を hasReply で絞ると、「下書きだけ生成」した瞬間に
+  /// そのレビューが未返信一覧から消え、二度と一括投稿の対象にならなくなる
+  /// （＝下書き一括が行き止まりになる）。対象判定は投稿済みかどうかで行う。
+  bool get needsReply => !isPosted;
 
   factory ReviewRow.fromJson(Map<String, dynamic> j) {
     final topics = <String>[];

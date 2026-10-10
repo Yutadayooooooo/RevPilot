@@ -4,7 +4,15 @@
 	<dict>
 		<key>CADisableMinimumFrameDurationOnPhone</key>
 		<true/>
-		<key>CFBundleDevelopmentRegion</key>
+		<!--
+	  輸出コンプライアンス。RevPilot が使う暗号は HTTPS(TLS) だけで、
+	  独自の暗号を実装していないため申告免除に該当する。
+	  これを書いておかないと、ビルドを提出するたびに App Store Connect で
+	  同じ質問に答えることになり、答え忘れると審査に進まない。
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
 		<key>CFBundleDisplayName</key>
 		<string>RevPilot</string>
@@ -15,7 +23,7 @@
 		<key>CFBundleInfoDictionaryVersion</key>
 		<string>6.0</string>
 		<key>CFBundleName</key>
-		<string>revpilot_mobile</string>
+		<string>RevPilot</string>
 		<key>CFBundlePackageType</key>
 		<string>APPL</string>
 		<key>CFBundleShortVersionString</key>

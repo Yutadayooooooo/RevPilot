@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../config.dart';
 import '../theme.dart';
 
 /// メール＋パスワードでのログイン／新規登録。
@@ -61,6 +63,46 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// パスワード再設定メールの送信。
+  /// これが無いと、パスワードを忘れた利用者は自力で復帰できず、
+  /// 運営が手作業で対応するしかなくなる（有料サービスでは成立しない）。
+  Future<void> _sendReset() async {
+    final email = _email.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = 'メールアドレスを入力してから実行してください。');
+      return;
+    }
+    HapticFeedback.lightImpact();
+    setState(() {
+      _loading = true;
+      _error = null;
+      _info = null;
+    });
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: AppConfig.hasWeb ? '${AppConfig.webUrl}/reset-password' : null,
+      );
+      if (mounted) {
+        setState(() => _info = 'パスワード再設定用のメールを送信しました。受信箱をご確認ください。');
+      }
+    } on AuthException catch (e) {
+      setState(() => _error = e.message);
+    } catch (e) {
+      setState(() => _error = '通信エラーが発生しました');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _openLegal(String path) async {
+    if (!AppConfig.hasWeb) return;
+    final uri = Uri.parse('${AppConfig.webUrl}$path');
+    if (!await launchUrl(uri, mode: LaunchMode.inAppBrowserView)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -104,7 +146,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _password,
                     obscureText: true,
-                    decoration: const InputDecoration(labelText: 'パスワード'),
+                    decoration: const InputDecoration(
+                      labelText: 'パスワード',
+                      helperText: '8文字以上',
+                    ),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),
@@ -140,6 +185,38 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? 'アカウントをお持ちの方はログイン'
                         : 'アカウントを新規作成'),
                   ),
+                  if (!_isSignUp)
+                    TextButton(
+                      onPressed: _loading ? null : _sendReset,
+                      child: const Text('パスワードをお忘れですか？',
+                          style: TextStyle(fontSize: 13)),
+                    ),
+                  const SizedBox(height: 8),
+                  // 登録時に規約・プライバシーへ到達できるようにする（ストア審査でも確認される）。
+                  if (AppConfig.hasWeb) ...[
+                    const Divider(height: 24),
+                    Text(
+                      '登録・ログインすることで、以下に同意したものとみなされます。',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        TextButton(
+                          onPressed: () => _openLegal('/terms'),
+                          child: const Text('利用規約',
+                              style: TextStyle(fontSize: 12)),
+                        ),
+                        const Text('·', style: TextStyle(color: Colors.grey)),
+                        TextButton(
+                          onPressed: () => _openLegal('/privacy'),
+                          child: const Text('プライバシーポリシー',
+                              style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

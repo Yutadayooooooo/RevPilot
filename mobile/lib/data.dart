@@ -13,11 +13,18 @@ class Repo {
   static SupabaseClient get _db => Supabase.instance.client;
 
   // ---- 共通: Next.js API 呼び出し（Bearer認証） ----
+  //
+  // タイムアウトは処理の重さに合わせて呼び出し側が指定する。
+  // 以前は一律15秒だったため、AI生成を伴う処理（1件でも数秒、一括なら分単位）が
+  // 必ずクライアント側で先に切れていた。サーバーは処理を続けるので、
+  // 利用者にはエラーが見えるのに課金だけ発生し、再実行で二重課金になっていた。
   static Future<Map<String, dynamic>> _postApi(
-      String path, Map<String, dynamic> body) async {
+    String path,
+    Map<String, dynamic> body, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
     if (!AppConfig.hasApi) {
-      throw const ApiException(
-          'この機能はサーバー接続が必要です（設定→APIのURLを設定してください）。');
+      throw const ApiException('この機能はご利用いただけません。時間をおいて再度お試しください。');
     }
     final token = _db.auth.currentSession?.accessToken;
     if (token == null) throw const ApiException('ログインが必要です。');
@@ -32,11 +39,11 @@ class Repo {
             },
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(timeout);
     } catch (_) {
-      // 接続失敗/タイムアウトは生の ClientException を出さず、原因が分かる文言に。
-      throw ApiException(
-          'サーバーに接続できませんでした。開発サーバーの起動と接続先(${AppConfig.apiBaseUrl})を確認してください。');
+      // 接続失敗/タイムアウトは生の ClientException を出さず、利用者向けの文言に。
+      throw const ApiException(
+          'サーバーに接続できませんでした。通信環境をご確認のうえ、時間をおいて再度お試しください。');
     }
     Map<String, dynamic> json = {};
     try {
@@ -66,29 +73,22 @@ class Repo {
     String? description,
     String tone = 'polite',
   }) async {
-    final uid = _db.auth.currentUser?.id;
-    if (uid == null) throw const ApiException('ログインが必要です。');
-    final max = planMaxApps(await plan());
-    if (max != null) {
-      final existing = await apps();
-      if (existing.length >= max) {
-        throw ApiException(
-            '現在のプランでは$max件までです。Proにアップグレードすると無制限に連携できます。');
-      }
-    }
-    final row = await _db
-        .from('apps')
-        .insert({
-          'owner': uid,
-          'store': store,
-          'store_app_id': storeAppId,
-          'name': name,
-          'description': description,
-          'reply_tone': tone,
-        })
-        .select()
-        .single();
-    return AppRow.fromJson(Map<String, dynamic>.from(row));
+    // アプリ追加はAPI経由にする。
+    // 追加の時点でストア側のアクセス権（App IDの誤り・権限不足）を確認できるため、
+    // 「1時間後もレビューが0件」になって初めて気づく、という事態を防げる。
+    // 件数上限のチェックもサーバー側（およびDBトリガ）で行う。
+    final json = await _postApi(
+      '/api/apps',
+      {
+        'store': store,
+        'store_app_id': storeAppId,
+        'name': name,
+        'description': description,
+        'reply_tone': tone,
+      },
+      timeout: const Duration(seconds: 45), // ストアへの疎通確認を含む
+    );
+    return AppRow.fromJson(Map<String, dynamic>.from(json['app'] as Map));
   }
 
   static Future<void> updateApp(
@@ -141,8 +141,31 @@ class Repo {
     var listOut = (rows as List)
         .map((e) => ReviewRow.fromJson(Map<String, dynamic>.from(e)))
         .toList();
-    if (unrepliedOnly) listOut = listOut.where((r) => !r.hasReply).toList();
+    // 「未返信」は「ストアに投稿していない」で判定する（下書きだけの状態も対象に残す）。
+    if (unrepliedOnly) listOut = listOut.where((r) => r.needsReply).toList();
     return listOut;
+  }
+
+  /// 通知の判定・バナー表示に使う軽量なレビュー取得。
+  ///
+  /// 通知チェックは定期的に走るため、一覧用の重いクエリ
+  /// （200件 × replies(*) × review_topics）を使うと、アプリを開いている間ずっと
+  /// 大量の通信が発生し、利用者のデータ通信量とDBの転送量を圧迫する。
+  /// 通知に必要な列だけを、必要な件数だけ取る。
+  static Future<List<ReviewRow>> reviewsForNotify({
+    List<int>? ratings,
+    int limit = 50,
+  }) async {
+    var query = _db
+        .from('reviews')
+        .select('id, store, rating, title, body, reviewed_at, apps!inner(name)');
+    if (ratings != null && ratings.isNotEmpty) {
+      query = query.inFilter('rating', ratings);
+    }
+    final rows = await query.order('reviewed_at', ascending: false).limit(limit);
+    return (rows as List)
+        .map((e) => ReviewRow.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
   }
 
   /// 運営からのお知らせ（有効かつ期間内のものだけRLSで返る）。
@@ -164,33 +187,45 @@ class Repo {
 
   /// AI返信の生成（API）。生成文は replies に保存され本文が返る。
   static Future<String> generateAiReply(String reviewId) async {
-    final json = await _postApi('/api/reply', {
-      'reviewId': reviewId,
-      'action': 'draft',
-    });
+    final json = await _postApi(
+      '/api/reply',
+      {'reviewId': reviewId, 'action': 'draft'},
+      timeout: const Duration(seconds: 60), // AI生成は数秒〜十数秒かかる
+    );
     final reply = json['reply'];
     return reply is Map ? (reply['body'] as String? ?? '') : '';
   }
 
   /// ストアへ返信を投稿（API）。textを渡すとその本文を投稿する。
   static Future<void> postReplyToStore(String reviewId, {String? text}) async {
-    await _postApi('/api/reply', {
-      'reviewId': reviewId,
-      'action': 'post',
-      if (text != null && text.trim().isNotEmpty) 'text': text,
-    });
+    await _postApi(
+      '/api/reply',
+      {
+        'reviewId': reviewId,
+        'action': 'post',
+        if (text != null && text.trim().isNotEmpty) 'text': text,
+      },
+      timeout: const Duration(seconds: 60),
+    );
   }
 
   /// 複数レビューへ一括でAI返信を生成（post=trueで投稿まで）。
-  /// 返り値: { generated, posted, results:[{reviewId, ok, status?, error?}] }
+  /// 返り値: { generated, posted, skipped, results:[{reviewId, ok, status?, error?}] }
+  ///
+  /// サーバーは最大300秒かけて処理し、時間内に終わらなかった分を skipped として返す。
+  /// クライアントのタイムアウトはそれより長くしておく必要がある。
   static Future<Map<String, dynamic>> bulkReply(
     List<String> reviewIds, {
     bool post = false,
   }) =>
-      _postApi('/api/reply/bulk', {
-        'reviewIds': reviewIds,
-        'action': post ? 'post' : 'draft',
-      });
+      _postApi(
+        '/api/reply/bulk',
+        {
+          'reviewIds': reviewIds,
+          'action': post ? 'post' : 'draft',
+        },
+        timeout: const Duration(seconds: 320),
+      );
 
   /// レビューへの返信ドラフトを保存（直接Supabase）。
   static Future<ReplyRow> saveManualReply(String reviewId, String body) async {
@@ -212,50 +247,65 @@ class Repo {
 
   /// ストアAPIから新着レビューを取り込む。取り込み件数などのマップを返す。
   static Future<Map<String, dynamic>> refreshFromStores() =>
-      _postApi('/api/poll', {});
+      _postApi('/api/poll', {}, timeout: const Duration(seconds: 90));
 
-  // ---- ストア連携（状態は直接Supabase / 保存はAPIで暗号化） ----
+  // ---- ストア連携（保存も参照もAPI経由） ----
   /// 連携済みストア（'appstore' / 'googleplay'）の一覧。
+  ///
+  /// store_credentials はクライアントから直接読めないようRLSで閉じてあるため、
+  /// （暗号化済みとはいえ資格情報をクライアントに配る理由がない）APIから取得する。
   static Future<List<String>> connectedStores() async {
-    final uid = _db.auth.currentUser?.id;
-    if (uid == null) return [];
-    final rows =
-        await _db.from('store_credentials').select('store').eq('owner', uid);
-    return (rows as List).map((e) => e['store'] as String).toList();
+    if (!AppConfig.hasApi) return [];
+    final token = _db.auth.currentSession?.accessToken;
+    if (token == null) return [];
+    try {
+      final res = await http.get(
+        Uri.parse('${AppConfig.apiBaseUrl}/api/credentials'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 20));
+      if (res.statusCode < 200 || res.statusCode >= 300) return [];
+      final json = jsonDecode(res.body) as Map<String, dynamic>;
+      return ((json['connected'] as List?) ?? []).cast<String>();
+    } catch (_) {
+      return [];
+    }
   }
 
+  // 資格情報の保存はサーバー側で実際にストアAPIへ疎通確認してから行われる。
+  // 検証に失敗した場合は保存されず、理由が ApiException として返る。
   static Future<void> saveAppStoreCredentials({
     required String issuerId,
     required String keyId,
     required String privateKey,
   }) =>
-      _postApi('/api/credentials', {
-        'store': 'appstore',
-        'issuerId': issuerId,
-        'keyId': keyId,
-        'privateKey': privateKey,
-      });
+      _postApi(
+        '/api/credentials',
+        {
+          'store': 'appstore',
+          'issuerId': issuerId,
+          'keyId': keyId,
+          'privateKey': privateKey,
+        },
+        timeout: const Duration(seconds: 45),
+      );
 
   static Future<void> saveGooglePlayCredentials(String serviceAccountJson) =>
-      _postApi('/api/credentials', {
-        'store': 'googleplay',
-        'serviceAccountJson': serviceAccountJson,
-      });
+      _postApi(
+        '/api/credentials',
+        {
+          'store': 'googleplay',
+          'serviceAccountJson': serviceAccountJson,
+        },
+        timeout: const Duration(seconds: 45),
+      );
 
-  // ---- 課金（API→URLを外部ブラウザで開く） ----
-  static Future<String> checkoutUrl(String plan) async {
-    final json = await _postApi('/api/billing/checkout', {'plan': plan});
-    final url = json['url'] as String?;
-    if (url == null) throw const ApiException('決済URLの取得に失敗しました。');
-    return url;
-  }
-
-  static Future<String> billingPortalUrl() async {
-    final json = await _postApi('/api/billing/portal', {});
-    final url = json['url'] as String?;
-    if (url == null) throw const ApiException('管理画面URLの取得に失敗しました。');
-    return url;
-  }
+  // ---- 課金 ----
+  //
+  // 決済は各OSのアプリ内課金のみ。外部決済（Stripe）への導線は持たない。
+  //   - iOS: App Store Review Guideline 3.1.1 が外部課金への誘導を禁じている
+  //   - Android: Google Play の課金ポリシーも同様
+  // 以前は StoreKit の商品取得に失敗したとき Stripe Checkout をアプリ内ブラウザで
+  // 開くフォールバックがあり、これは確実にリジェクトされる実装だった。
 
   /// iOSのIAP購入/復元をサーバーで確定し、profiles.plan に反映する。
   /// 返り値は反映後のプランキー（'pro' 等）。
@@ -264,11 +314,29 @@ class Repo {
     String? transactionId,
     String? verificationData,
   }) async {
-    final json = await _postApi('/api/billing/iap/apple', {
-      'productId': productId,
-      if (transactionId != null) 'transactionId': transactionId,
-      if (verificationData != null) 'verificationData': verificationData,
-    });
+    final json = await _postApi(
+      '/api/billing/iap/apple',
+      {
+        'productId': productId,
+        if (transactionId != null) 'transactionId': transactionId,
+        if (verificationData != null) 'verificationData': verificationData,
+      },
+      timeout: const Duration(seconds: 45), // Appleへの問い合わせを含む
+    );
+    return (json['plan'] as String?) ?? 'free';
+  }
+
+  /// AndroidのGoogle Play課金をサーバーで確定し、profiles.plan に反映する。
+  /// verificationData は purchaseToken。
+  static Future<String> confirmGooglePurchase({
+    required String productId,
+    required String purchaseToken,
+  }) async {
+    final json = await _postApi(
+      '/api/billing/iap/google',
+      {'productId': productId, 'purchaseToken': purchaseToken},
+      timeout: const Duration(seconds: 45), // Googleへの問い合わせを含む
+    );
     return (json['plan'] as String?) ?? 'free';
   }
 
@@ -304,6 +372,43 @@ class Repo {
         (json['error'] as String?) ?? 'アカウント削除に失敗しました (${res.statusCode})');
   }
 
+  // ---- リモートpush通知 ----
+
+  /// この端末を通知先として登録する。
+  /// 端末トークンは service_role でしか書けないためAPI経由（RLSではなくサーバーで所有者を付け替える）。
+  static Future<void> registerPushToken({
+    required String token,
+    required String platform,
+  }) =>
+      _postApi(
+        '/api/push/devices',
+        {'token': token, 'platform': platform},
+        timeout: const Duration(seconds: 20),
+      ).then((_) {});
+
+  /// この端末を通知先から外す（ログアウト時）。
+  static Future<void> unregisterPushToken(String token) => _postApi(
+        '/api/push/devices',
+        {'token': token, 'remove': true},
+        timeout: const Duration(seconds: 20),
+      ).then((_) {});
+
+  /// 通知対象（all / low / off）をサーバーにも保存する。
+  /// 端末内(SharedPreferences)だけではサーバーが知り得ず、
+  /// 「★1〜2のみ」にしていてもリモートpushは全件届いてしまう。
+  static Future<void> savePushScope(String scope) => _postApi(
+        '/api/settings',
+        {'push_scope': scope},
+        timeout: const Duration(seconds: 20),
+      ).then((_) {});
+
+  /// 自分の端末にテスト通知を送る（設定が正しいかの確認用）。
+  static Future<void> sendTestPush() => _postApi(
+        '/api/push/test',
+        const {},
+        timeout: const Duration(seconds: 30),
+      ).then((_) {});
+
   // ---- プラン ----
   static Future<String> plan() async {
     final uid = _db.auth.currentUser?.id;
@@ -326,16 +431,28 @@ extension ReviewSortLabel on ReviewSort {
       };
 }
 
-/// プラン別アプリ数上限（null=無制限）。lib/plan.ts と一致させる。
+/// プラン別アプリ数上限（null=無制限）。lib/plan.ts の PLAN_LIMITS と一致させる。
+/// 有料プランは無制限（アプリ数は原価にほぼ影響せず、制限しても離脱を招くだけのため）。
 int? planMaxApps(String plan) => switch (plan) {
-      'max' || 'team' => null,
-      'pro' => 5,
+      'pro' || 'max' || 'team' => null,
       _ => 1,
     };
 
-/// 一括返信の1回あたり上限（1=一括不可 / null=無制限）。lib/plan.ts と一致。
-int? planBulkLimit(String plan) => switch (plan) {
-      'max' || 'team' => null,
+/// プラン別のレビュー履歴の閲覧範囲（日数）。null=無期限。
+///
+/// 実際の制限はサーバー側（reviews のRLSポリシー）で強制されている。
+/// ここはUIで「これ以上前は表示されない」と伝えるための写し。
+int? planHistoryDays(String plan) => switch (plan) {
+      'pro' || 'max' || 'team' => null,
+      _ => 30,
+    };
+
+/// 一括返信の1回あたり上限（1=一括不可）。lib/plan.ts の PLAN_LIMITS と一致させる。
+///
+/// 「無制限」は廃止した。1リクエストで無制限に処理させると、関数の実行時間上限を
+/// 超えて中途半端に打ち切られ、課金だけ発生して結果が返らない事故になるため。
+int planBulkLimit(String plan) => switch (plan) {
+      'max' || 'team' => 50,
       'pro' => 20,
       _ => 1,
     };

@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Android 13+ の通知許可（低評価レビューのバナー通知に使用） -->
+    <!-- Android 13+ の通知許可（新着レビューのバナー通知に使用） -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Google Play の定期購入（アプリ内課金）。Play Billing Library も宣言するが、
+         データセーフティ申告と権限の説明を明確にするため明示しておく。 -->
+    <uses-permission android:name="com.android.vending.BILLING"/>
+    <!-- 通信（http パッケージ / Supabase / ストアAPI） -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="RevPilot"
         android:name="${applicationName}"
@@ -27,6 +32,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- リモートpush(FCM)がバックグラウンドで表示するときの通知チャンネル。
+             アプリを一度も起動していない状態でも通知が届くため、
+             チャンネルの指定が無いと「その他」扱いになり重要度が下がる。
+             lib/push.ts の ANDROID_CHANNEL_ID と一致させること。 -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="reviews" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -47,6 +59,11 @@
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
+        </intent>
+        <!-- 問い合わせのメールアプリを開けるようにする -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
         </intent>
     </queries>
 </manifest>

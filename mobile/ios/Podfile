@@ -1,5 +1,6 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# Firebase (firebase_core / firebase_messaging) が iOS 15.0 以上を要求するため、
+# 13.0 のままだと「minimum platform version 15.0 が必要」でビルドが落ちる。
+platform :ios, '15.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'

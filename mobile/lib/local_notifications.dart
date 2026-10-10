@@ -6,10 +6,11 @@ import 'models.dart';
 
 /// 新着レビューをOSのバナー通知で知らせる（ローカル通知）。
 ///
-/// リモートpush(APNs/FCM)と違い **Apple Developer登録もFirebaseも不要**で、
-/// 無料の署名のまま iOS / Android どちらでも本物のバナーが出る。
-/// ただし「アプリが起動している間に検知したものを通知する」仕組みなので、
-/// アプリを完全終了している間に届いたレビューは（リモートpushを入れるまで）通知されない。
+/// 役割はリモートpush([PushService])との住み分け:
+///   - 起動中に前景ポーリングが拾った新着 → ここ
+///   - Androidで前景受信した push の表示    → ここ（OSが出してくれないため）
+///   - アプリ終了中の新着                    → リモートpush
+/// Firebaseを設定していない環境では、これが唯一の通知経路になる。
 class LocalNotifier {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -56,6 +57,37 @@ class LocalNotifier {
           ?.requestPermissions(alert: true, badge: true, sound: true);
     }
     _ready = true;
+  }
+
+  /// 任意の見出し・本文でバナーを出す。
+  ///
+  /// リモートpush（FCM）をフォアグラウンドで受け取ったときに使う。
+  /// Androidは起動中のメッセージをOSが表示しないため、自前で出す必要がある。
+  static Future<void> showRaw({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    await init();
+    await _plugin.show(
+      id & 0x7fffffff,
+      title,
+      body,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDesc,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBanner: true,
+          presentSound: true,
+        ),
+      ),
+    );
   }
 
   /// 新着レビュー1件をバナー表示する。

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  リモートプッシュ通知（APNs）。この entitlement が無いと、
+	  Firebase を正しく設定しても端末が APNs トークンを取得できず、
+	  「エラーも出ないのに通知だけ届かない」状態になる。
+
+	  値は development のままでよい。配布用にアーカイブすると、
+	  Xcode が配布用プロビジョニングプロファイルに合わせて production に置き換える。
+	  （App Store 版だけ通知が届かない場合は、まずここを疑う）
+	-->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

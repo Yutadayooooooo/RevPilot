@@ -144,11 +144,18 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                       ),
                     ]);
                   }
+                  // Freeは履歴の閲覧範囲が限られるため、末尾にその旨とアップセルを出す。
+                  // 「古いレビューが消えた」と誤解されないよう、保存はされていることを明記する。
+                  final historyDays = planHistoryDays(_plan);
+                  final showHistoryNote = historyDays != null;
                   return ListView.separated(
                     padding: const EdgeInsets.all(16),
-                    itemCount: reviews.length,
+                    itemCount: reviews.length + (showHistoryNote ? 1 : 0),
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (_, i) {
+                      if (i == reviews.length) {
+                        return _historyNote(historyDays!);
+                      }
                       final delay = (i < 12 ? i * 45 : 0).ms;
                       return _ReviewCard(
                         reviews[i],
@@ -168,6 +175,47 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                 },
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 履歴の閲覧範囲の案内（Freeのみ）。
+  ///
+  /// レビュー自体は削除しておらず、課金すれば即座に全期間が見える。
+  /// 「消えた」と誤解されると問い合わせと不信につながるので、そこを明記する。
+  Widget _historyNote(int days) {
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.history, size: 18, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              Text('表示は直近$days日ぶんです',
+                  style: const TextStyle(fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'それ以前のレビューも削除せず保存しています。'
+            'Proにアップグレードすると、すぐに全期間を閲覧できます。',
+            style: TextStyle(fontSize: 12, height: 1.5, color: context.subtleC),
+          ),
+          const SizedBox(height: 10),
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const PlanScreen())),
+            child: const Text('プランを見る'),
           ),
         ],
       ),
@@ -395,7 +443,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   // ---- 一括AI返信（プラン別ゲート） ----
   Future<void> _bulkAction() async {
     HapticFeedback.selectionClick();
-    final limit = planBulkLimit(_plan); // 1=不可, null=無制限
+    final limit = planBulkLimit(_plan); // 1=不可
 
     // Free（一括不可）はアップセル
     if (limit == 1) {
@@ -404,7 +452,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         builder: (ctx) => AlertDialog(
           title: const Text('一括返信はProプランから'),
           content: const Text(
-              'Proは最大20件、Maxは全レビューにまとめてAI返信を生成・投稿できます。'
+              'Proは一度に最大20件、Maxは最大50件をまとめてAI返信できます。'
               'アップグレードしますか？'),
           actions: [
             TextButton(
@@ -425,14 +473,14 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
 
     // 現在の絞り込み結果のうち未返信を対象にする
     final all = await _future;
-    final unreplied = all.where((r) => !r.hasReply).toList();
+    final unreplied = all.where((r) => r.needsReply).toList();
     if (unreplied.isEmpty) {
       if (mounted) showSnack(context, '未返信のレビューはありません');
       return;
     }
     var targets = unreplied;
     var capped = false;
-    if (limit != null && targets.length > limit) {
+    if (targets.length > limit) {
       targets = targets.sublist(0, limit);
       capped = true;
     }

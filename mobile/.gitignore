@@ -46,3 +46,4 @@ app.*.map.json
 
 # 環境設定（anonキーは公開可だが値の混在を避けるためignore。exampleを配布）
 config/app_config.json
+config/app_config.prod.json
