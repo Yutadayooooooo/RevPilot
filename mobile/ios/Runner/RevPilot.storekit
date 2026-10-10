@@ -5,7 +5,7 @@
       {
         "locale" : "ja",
         "policyText" : "",
-        "policyURL" : "https://revpilot.app/privacy"
+        "policyURL" : "https://app.revpilot-jp.workers.dev/privacy"
       }
     ]
   },

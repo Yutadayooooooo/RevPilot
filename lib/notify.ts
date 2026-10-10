@@ -94,6 +94,14 @@ async function sendWebhook(text: string, url?: string | null): Promise<void> {
 /**
  * 任意の宛先にメール送信（新着通知・週次サマリー等で使用）。
  * RESEND_API_KEY未設定なら黙ってスキップ。
+ *
+ * 【RESEND_FROM について】
+ * 既定値は置かない。Resend は認証済みの自分のドメインからしか送れず、
+ * 未認証のうちは onboarding@resend.dev から「Resendアカウント自身のアドレス」宛にしか
+ * 送れない（他人宛は 403 "You can only send testing emails to your own email address"）。
+ * ここで適当なドメインを既定値にすると、設定し忘れたときに 403 を握り潰して
+ * 「なぜかメールだけ来ない」という最も気づきにくい壊れ方をする。
+ * 以前は alerts@revpilot.app を既定にしていたが、このドメインは自社では取得していない。
  */
 export async function sendEmailTo(
   to: string,
@@ -103,7 +111,16 @@ export async function sendEmailTo(
 ): Promise<boolean> {
   const key = process.env.RESEND_API_KEY;
   if (!key || !to) return false;
-  const from = process.env.RESEND_FROM || "RevPilot <alerts@revpilot.app>";
+  const from = process.env.RESEND_FROM;
+  if (!from) {
+    console.error(
+      "[notify] RESEND_API_KEY はあるが RESEND_FROM が未設定のためメールを送れません。" +
+        "独自ドメインを認証したうえで RESEND_FROM にそのドメインのアドレスを設定してください" +
+        "（ドメイン未認証なら onboarding@resend.dev が使えますが、" +
+        "宛先は Resend アカウント自身のアドレスに限られます）。"
+    );
+    return false;
+  }
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
