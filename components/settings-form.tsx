@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Apple, Play, Trash2, Plus, Check, Loader2, Plug, ArrowRight } from "lucide-react";
+import { Apple, Play, Trash2, Plus, Check, Loader2, Plug, ArrowRight, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import type { AppRow, NotifyPrefs } from "@/lib/settings-data";
+import type { AppRow, NotifyPrefs, UsageInfo } from "@/lib/settings-data";
+import { PUBLIC_PLANS } from "@/lib/plans";
 
 const TONES = [
   { value: "polite", label: "丁寧（敬語）" },
@@ -20,11 +21,13 @@ export function SettingsForm({
   initialPrefs,
   connected,
   billingEnabled,
+  usage,
 }: {
   initialApps: AppRow[];
   initialPrefs: NotifyPrefs;
   connected: string[];
   billingEnabled: boolean;
+  usage: UsageInfo | null;
 }) {
   const [apps, setApps] = useState<AppRow[]>(initialApps);
   const [prefs, setPrefs] = useState<NotifyPrefs>(initialPrefs);
@@ -34,7 +37,7 @@ export function SettingsForm({
       <StoreConnections connected={connected} />
       <ConnectedApps apps={apps} setApps={setApps} />
       <Notifications prefs={prefs} setPrefs={setPrefs} />
-      <PlanCard plan={prefs.plan} billingEnabled={billingEnabled} />
+      <PlanCard plan={prefs.plan} billingEnabled={billingEnabled} usage={usage} />
     </div>
   );
 }
@@ -140,19 +143,37 @@ function ConnectedApps({ apps, setApps }: { apps: AppRow[]; setApps: (a: AppRow[
       <CardContent className="space-y-3">
         {apps.length === 0 && <p className="text-sm text-muted-foreground">まだ連携アプリがありません。</p>}
         {apps.map((a) => (
-          <div key={a.id} className="flex items-center justify-between rounded-md border p-3">
-            <div className="flex items-center gap-3">
-              {a.store === "appstore" ? <Apple className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              <div>
-                <div className="text-sm font-medium">{a.name}</div>
-                <div className="text-xs text-muted-foreground">{a.store_app_id}</div>
+          <div
+            key={a.id}
+            className={`rounded-md border p-3 ${a.last_error ? "border-amber-300 bg-amber-50" : ""}`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {a.store === "appstore" ? <Apple className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                <div>
+                  <div className="text-sm font-medium">{a.name}</div>
+                  <div className="text-xs text-muted-foreground">{a.store_app_id}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge tone="muted">{TONES.find((t) => t.value === a.reply_tone)?.label ?? a.reply_tone}</Badge>
+                <Button size="icon" variant="ghost" onClick={() => remove(a.id)} aria-label="削除">
+                  <Trash2 className="h-4 w-4 text-red-500" />
+                </Button>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Badge tone="muted">{TONES.find((t) => t.value === a.reply_tone)?.label ?? a.reply_tone}</Badge>
-              <Button size="icon" variant="ghost" onClick={() => remove(a.id)} aria-label="削除">
-                <Trash2 className="h-4 w-4 text-red-500" />
-              </Button>
+            {/* 取得の健康状態。連携が壊れていることに気づけないのが最大の離脱要因だった。 */}
+            <div className="mt-2 flex items-start gap-1.5 text-xs">
+              {a.last_error ? (
+                <>
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+                  <span className="text-amber-800">取得エラー: {a.last_error}</span>
+                </>
+              ) : (
+                <span className="text-muted-foreground">
+                  最終取得: {a.last_polled_at ? formatWhen(a.last_polled_at) : "まだ取得していません"}
+                </span>
+              )}
             </div>
           </div>
         ))}
@@ -214,47 +235,71 @@ function ConnectedApps({ apps, setApps }: { apps: AppRow[]; setApps: (a: AppRow[
   );
 }
 
+
 /* ---------------- 通知先 ---------------- */
+/**
+ * 通知先の設定。
+ *
+ * LINE通知は廃止した。運営のBotから push する仕組みだったが、
+ * 利用者が自分の LINE userId を知る手段が無く（webhookでしか取得できない）、
+ * 運営の公式アカウントを友だち追加する導線も無かったため、
+ * 実際には誰も使えない入力欄になっていた。
+ * 代わりに Slack / Discord の Incoming Webhook（URLを貼るだけ）に置き換える。
+ *
+ * 通知メールの宛先はログイン中のアドレス固定。以前は任意のアドレスを保存でき、
+ * 他人のアドレスを入れると運営のドメインからその人にメールが飛ぶ状態だった。
+ */
 function Notifications({ prefs, setPrefs }: { prefs: NotifyPrefs; setPrefs: (p: NotifyPrefs) => void }) {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function save() {
     setBusy(true);
     setSaved(false);
-    await fetch("/api/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ line_user_id: prefs.line_user_id, email: prefs.email }),
-    });
-    setBusy(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setErr(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notify_webhook_url: prefs.notify_webhook_url ?? "" }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "保存に失敗しました");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>低評価アラートの通知先</CardTitle>
+        <CardTitle>新着レビューの通知先</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
           <Label>通知メール</Label>
-          <Input
-            type="email"
-            value={prefs.email ?? ""}
-            onChange={(e) => setPrefs({ ...prefs, email: e.target.value })}
-            placeholder="you@example.com"
-          />
+          <Input type="email" value={prefs.email ?? ""} readOnly disabled />
+          <p className="mt-1 text-xs text-muted-foreground">
+            ログイン中のメールアドレスに送信します。変更するにはアカウントのメールアドレスを変更してください。
+          </p>
         </div>
         <div>
-          <Label>LINE ユーザーID（Messaging API）</Label>
+          <Label>Slack / Discord の Webhook URL（任意）</Label>
           <Input
-            value={prefs.line_user_id ?? ""}
-            onChange={(e) => setPrefs({ ...prefs, line_user_id: e.target.value })}
-            placeholder="Uxxxxxxxx..."
+            value={prefs.notify_webhook_url ?? ""}
+            onChange={(e) => setPrefs({ ...prefs, notify_webhook_url: e.target.value })}
+            placeholder="https://hooks.slack.com/services/..."
           />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Slack は「Incoming Webhooks」、Discord はチャンネル設定の「連携サービス &gt; ウェブフック」で発行できます。
+          </p>
         </div>
+        {err && <p className="text-sm text-red-600">{err}</p>}
         <div className="flex items-center gap-3">
           <Button onClick={save} disabled={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} 保存
@@ -267,63 +312,54 @@ function Notifications({ prefs, setPrefs }: { prefs: NotifyPrefs; setPrefs: (p: 
 }
 
 /* ---------------- 課金プラン ---------------- */
-const PLANS = [
-  { key: "free", name: "Free", price: "¥0", features: ["1アプリ", "手動更新", "AI返信 月10件"] },
-  { key: "pro", name: "Pro", price: "¥1,480/月", features: ["全アプリ", "自動取得", "AI返信 無制限", "週次サマリー"] },
-  { key: "team", name: "Team", price: "¥2,980/月", features: ["複数メンバー", "Slack連携", "競合監視"] },
-];
-
-function PlanCard({ plan, billingEnabled }: { plan: string; billingEnabled: boolean }) {
-  const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function goToCheckout(planKey: string) {
-    setBusy(planKey);
-    setErr(null);
-    try {
-      const res = await fetch("/api/billing/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: planKey }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.url) throw new Error(json.error ?? "決済ページを開けませんでした");
-      window.location.href = json.url;
-    } catch (e: any) {
-      setErr(e.message);
-      setBusy(null);
-    }
-  }
-
-  async function openPortal() {
-    setBusy("portal");
-    setErr(null);
-    try {
-      const res = await fetch("/api/billing/portal", { method: "POST" });
-      const json = await res.json();
-      if (!res.ok || !json.url) throw new Error(json.error ?? "管理ページを開けませんでした");
-      window.location.href = json.url;
-    } catch (e: any) {
-      setErr(e.message);
-      setBusy(null);
-    }
-  }
-
-  const isPaid = plan === "pro" || plan === "team";
-
+/**
+ * プラン表示は lib/plans.ts の PUBLIC_PLANS だけを出典にする。
+ *
+ * 【購入導線は置かない】
+ * RevPilot の決済は iOS / Android のアプリ内課金のみ。
+ * Web からの Stripe 決済は提供しないため、ここでは現在のプランと
+ * 今月の利用状況を表示するだけにする（Web版のダッシュボードは
+ * そもそも本番では無効。middleware.ts の ENABLE_WEB_APP を参照）。
+ */
+function PlanCard({
+  plan,
+  billingEnabled: _billingEnabled,
+  usage,
+}: {
+  plan: string;
+  billingEnabled: boolean;
+  usage: UsageInfo | null;
+}) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader>
         <CardTitle>課金プラン</CardTitle>
-        {isPaid && billingEnabled && (
-          <Button size="sm" variant="outline" onClick={openPortal} disabled={busy === "portal"}>
-            {busy === "portal" ? <Loader2 className="h-4 w-4 animate-spin" /> : null} プランを管理
-          </Button>
-        )}
       </CardHeader>
       <CardContent className="space-y-3">
+        {usage && (
+          <div className="rounded-md border bg-muted/40 p-3">
+            <div className="flex justify-between text-sm">
+              <span>今月のAI利用</span>
+              <span className="font-medium">
+                AI返信 {usage.usedReplies} / {usage.limitReplies} 件ぶん
+              </span>
+            </div>
+            <div className="mt-2 h-2 w-full rounded-full bg-muted">
+              <div
+                className="h-2 rounded-full bg-primary"
+                style={{
+                  width: `${Math.min(100, usage.limitReplies ? (usage.usedReplies / usage.limitReplies) * 100 : 0)}%`,
+                }}
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              トピック分析も同じ枠から消費します（分析1件＝返信0.2件ぶん）。毎月1日にリセットされます。
+            </p>
+          </div>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-3">
-          {PLANS.map((p) => {
+          {PUBLIC_PLANS.map((p) => {
             const current = p.key === plan;
             return (
               <div
@@ -332,39 +368,41 @@ function PlanCard({ plan, billingEnabled }: { plan: string; billingEnabled: bool
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium">{p.name}</span>
-                  {current && <Badge>現在</Badge>}
+                  {current ? <Badge>現在</Badge> : p.popular ? <Badge tone="muted">おすすめ</Badge> : null}
                 </div>
                 <div className="my-2 text-lg font-semibold">{p.price}</div>
+                <p className="mb-2 text-xs text-muted-foreground">{p.tagline}</p>
                 <ul className="space-y-1 text-xs text-muted-foreground">
                   {p.features.map((f) => (
-                    <li key={f} className="flex items-center gap-1">
-                      <Check className="h-3 w-3 text-primary" /> {f}
+                    <li key={f} className="flex items-start gap-1">
+                      <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary" /> {f}
                     </li>
                   ))}
                 </ul>
-                {!current && p.key !== "free" && (
-                  <Button
-                    size="sm"
-                    className="mt-3 w-full"
-                    variant="outline"
-                    onClick={() => goToCheckout(p.key)}
-                    disabled={!billingEnabled || busy === p.key}
-                  >
-                    {busy === p.key ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    {isPaid ? "変更" : "アップグレード"}
-                  </Button>
-                )}
               </div>
             );
           })}
         </div>
-        {err && <p className="text-sm text-red-600">{err}</p>}
-        {!billingEnabled && (
-          <p className="text-xs text-muted-foreground">
-            課金は未設定です。<code>STRIPE_SECRET_KEY</code> と各プランの price ID を設定すると有効になります。
-          </p>
-        )}
+
+        <p className="text-xs text-muted-foreground">
+          プランの変更・解約は iOS / Android アプリの「設定 &gt; プラン」から行えます。
+          サブスクは解約しない限り毎月自動更新されます。詳細は
+          <Link href="/terms" className="underline">利用規約</Link>と
+          <Link href="/tokushoho" className="underline">特定商取引法に基づく表記</Link>
+          をご確認ください。
+        </p>
       </CardContent>
     </Card>
   );
+}
+
+/** 「3分前」「2時間前」のような相対表記。取得が生きているかを一目で分かるようにする。 */
+function formatWhen(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "たった今";
+  if (min < 60) return `${min}分前`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour}時間前`;
+  return `${Math.floor(hour / 24)}日前`;
 }

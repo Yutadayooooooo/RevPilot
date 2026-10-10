@@ -3,7 +3,7 @@
  *
  * 何を確かめるか:
  *   1) 重複排除     … 同じレビューを2回取り込んでも、新規挿入は1回目だけ（2回目=0件）。
- *   2) 低評価通知   … ★1〜2は notifyLowRating が呼ばれる（LINE/メールが設定済みなら実際に届く）。
+ *   2) 新着通知     … notifyNewReview が呼ばれる（メール / Slack・Discord が設定済みなら実際に届く）。
  *   3) トピック分類 … ANTHROPIC_API_KEY があればAI分類が走る（--no-ai でスキップ可）。
  *   4) チェックポイント … poll_state に最新レビューIDが記録される。
  *   5) 処理時間     … 取り込み1回あたりのミリ秒。
@@ -132,7 +132,7 @@ check(
   json.checkpoint?.last_seen_external_id === reviews[0].external_id,
   `${json.checkpoint?.last_seen_external_id ?? "なし"}`
 );
-console.log(`ℹ 低評価通知: ★1〜2 が ${json.lowRatingCount} 件 → 1回目に notifyLowRating を実行`);
+console.log(`ℹ 新着通知: ★1〜2 が ${json.lowRatingCount} 件 → 1回目に notifyNewReview を実行（メール / Slack・Discord）`);
 console.log("   （LINE/メールが設定済みなら実際に届きます。届かない=そのチャネル未設定 or 宛先未設定）");
 console.log(`ℹ 処理時間: 1回目 ${json.firstRun.ms}ms / 2回目 ${json.secondRun.ms}ms（=③取得後の処理秒数）`);
 console.log(`ℹ DB内レビュー件数(このテストアプリ): ${json.reviewCountInDb}`);

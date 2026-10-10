@@ -27,7 +27,7 @@ export function OnboardingWizard({
   const [appAdded, setAppAdded] = useState(hasApps);
 
   function finish() {
-    router.push("/");
+    router.push("/dashboard");
     router.refresh();
   }
 
@@ -149,8 +149,26 @@ function StoreStep({
 
       {tab === "appstore" ? (
         <div className="space-y-3">
+          {/* 鍵の取得は外部サービスでの作業で、ここが最大の詰まりどころ。
+              手順とリンクを省略しない。 */}
+          <ol className="list-inside list-decimal space-y-1 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+            <li>
+              <a
+                href="https://appstoreconnect.apple.com/access/integrations/api"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-primary underline"
+              >
+                App Store Connect &gt; ユーザーとアクセス &gt; 統合
+              </a>
+              を開く
+            </li>
+            <li>「App Store Connect API」タブで鍵を生成（アクセス権は「App Manager」以上）</li>
+            <li>生成直後にダウンロードできる <code>.p8</code> ファイルを保存（再ダウンロード不可）</li>
+            <li>同じ画面の「Issuer ID」と、鍵一覧の「キーID」を下欄にコピー</li>
+          </ol>
           <p className="text-xs text-muted-foreground">
-            App Store Connect &gt; ユーザーとアクセス &gt; 統合 &gt; App Store Connect API で発行。
+            入力後、その場でAppleへ疎通確認を行います。エラーが出た場合は保存されません。
           </p>
           <div>
             <Label>Issuer ID</Label>
@@ -172,8 +190,34 @@ function StoreStep({
         </div>
       ) : (
         <div className="space-y-3">
+          <ol className="list-inside list-decimal space-y-1 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+            <li>
+              <a
+                href="https://console.cloud.google.com/iam-admin/serviceaccounts"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-primary underline"
+              >
+                Google Cloud
+              </a>
+              でサービスアカウントを作成し、JSONキーを発行
+            </li>
+            <li>
+              <a
+                href="https://play.google.com/console"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-primary underline"
+              >
+                Play Console
+              </a>
+              &gt; ユーザーと権限 で、そのサービスアカウントのメールアドレスを招待
+            </li>
+            <li>対象アプリへのアクセスと「レビューの表示・返信」権限を付与</li>
+            <li>ダウンロードしたJSONの中身を丸ごと下欄に貼り付け</li>
+          </ol>
           <p className="text-xs text-muted-foreground">
-            Google Cloud のサービスアカウントJSONを貼り付け。Play Console でそのアカウントに閲覧/返信権限を付与してください。
+            入力後、その場でGoogleへ疎通確認を行います。エラーが出た場合は保存されません。
           </p>
           <div>
             <Label>サービスアカウント JSON</Label>
@@ -322,34 +366,47 @@ function AppStep({
 
 /* -------- Step 3: 通知先 -------- */
 function NotifyStep({ email, onBack, onFinish }: { email: string; onBack: () => void; onFinish: () => void }) {
-  const [prefs, setPrefs] = useState({ email, line_user_id: "" });
+  const [webhook, setWebhook] = useState("");
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   async function saveAndFinish() {
     setBusy(true);
+    setErr(null);
     try {
-      await fetch("/api/settings", {
+      const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(prefs),
+        body: JSON.stringify({ notify_webhook_url: webhook }),
       });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setErr(json.error ?? "保存に失敗しました");
+        return; // 入力を直せるようにここで止める
+      }
+      onFinish();
     } finally {
       setBusy(false);
-      onFinish();
     }
   }
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">★1〜2の低評価が付いたら、ここに即通知します。</p>
+      <p className="text-sm text-muted-foreground">
+        新しいレビューが届いたらお知らせします。通知メールはログイン中のアドレス（{email}）に届きます。
+      </p>
       <div>
-        <Label>通知メール</Label>
-        <Input type="email" value={prefs.email} onChange={(e) => setPrefs({ ...prefs, email: e.target.value })} placeholder="you@example.com" />
+        <Label>Slack / Discord の Webhook URL（任意）</Label>
+        <Input
+          value={webhook}
+          onChange={(e) => setWebhook(e.target.value)}
+          placeholder="https://hooks.slack.com/services/..."
+        />
+        <p className="mt-1 text-xs text-muted-foreground">
+          Slack は「Incoming Webhooks」、Discord はチャンネル設定の「連携サービス &gt; ウェブフック」で発行できます。あとから設定でも変更できます。
+        </p>
       </div>
-      <div>
-        <Label>LINE ユーザーID（任意）</Label>
-        <Input value={prefs.line_user_id} onChange={(e) => setPrefs({ ...prefs, line_user_id: e.target.value })} placeholder="Uxxxxxxxx..." />
-      </div>
+      {err && <p className="text-sm text-red-600">{err}</p>}
       <div className="flex items-center justify-between">
         <Button variant="ghost" onClick={onBack}>
           戻る

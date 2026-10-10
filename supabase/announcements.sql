@@ -1,5 +1,11 @@
--- お知らせ機能の追加（既存DBへ後から適用する差分）。
--- Supabase SQL Editor で一度だけ実行する。
+-- 【このファイルは不要になりました】
+--
+-- announcements テーブルとポリシーは supabase/schema.sql に統合済みです。
+-- schema.sql は何度実行しても安全（冪等）なので、そちらを実行してください。
+--
+--   Supabase SQL Editor で supabase/schema.sql を貼り付けて実行
+--
+-- 内容は互換のために残してありますが、schema.sql を実行していれば適用は不要です。
 
 create table if not exists announcements (
   id uuid primary key default gen_random_uuid(),

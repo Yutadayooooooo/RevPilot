@@ -45,11 +45,11 @@ const APPS = [
     description: "レシート読み取りに対応したシンプルな家計簿アプリ。", reply_tone: "polite", count: 6 },
   { key: "ios3", store: "appstore", store_app_id: "6480003333", name: "AquaLog – 水分記録",
     description: "1日の水分摂取をワンタップで記録しリマインドする健康アプリ。", reply_tone: "casual", count: 4 },
-  { key: "and1", store: "googleplay", store_app_id: "com.revpilot.focusflow", name: "FocusFlow (Android)",
+  { key: "and1", store: "googleplay", store_app_id: "jp.revpilot.focusflow", name: "FocusFlow (Android)",
     description: "ポモドーロ式の集中タイマー。作業と休憩を自動で回し記録をグラフ化。", reply_tone: "casual", count: 8 },
-  { key: "and2", store: "googleplay", store_app_id: "com.revpilot.moneymint", name: "MoneyMint (Android)",
+  { key: "and2", store: "googleplay", store_app_id: "jp.revpilot.moneymint", name: "MoneyMint (Android)",
     description: "レシート読み取りに対応したシンプルな家計簿アプリ。", reply_tone: "polite", count: 5 },
-  { key: "and3", store: "googleplay", store_app_id: "com.revpilot.habitgrid", name: "HabitGrid – 習慣化",
+  { key: "and3", store: "googleplay", store_app_id: "jp.revpilot.habitgrid", name: "HabitGrid – 習慣化",
     description: "習慣をマス目で可視化して継続を後押しするトラッカー。", reply_tone: "apologetic", count: 7 },
 ];
 

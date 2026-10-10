@@ -1,8 +1,8 @@
 // Stripe（テストモード）の商品・価格をセットアップする開発用スクリプト。
 //
 // あなたが .env.local に STRIPE_SECRET_KEY=sk_test_... を貼ってから実行すると、
-// RevPilot の Pro/Max/Team の Product と月額 Price を作成（既にあれば再利用）し、
-// STRIPE_PRICE_PRO / MAX / TEAM を .env.local に自動で書き込みます。
+// RevPilot の Pro/Max の Product と月額 Price を作成（既にあれば再利用）し、
+// STRIPE_PRICE_PRO / MAX を .env.local に自動で書き込みます。
 //
 //   node scripts/setup-stripe.mjs
 //
@@ -45,10 +45,10 @@ const stripe = new Stripe(SECRET);
 const SITE = get("NEXT_PUBLIC_SITE_URL"); // ポータルの規約/プライバシーURLに使用（任意）
 
 // lib/stripe.ts と一致させる。JPY はゼロ小数通貨なので unit_amount は円そのまま。
+// Team は販売停止中（lib/stripe.ts の hidden: true）なので価格を作らない。
 const PLANS = [
   { key: "pro", name: "RevPilot Pro", amount: 1480, env: "STRIPE_PRICE_PRO" },
   { key: "max", name: "RevPilot Max", amount: 2980, env: "STRIPE_PRICE_MAX" },
-  { key: "team", name: "RevPilot Team", amount: 5800, env: "STRIPE_PRICE_TEAM" },
 ];
 
 /** metadata.revpilot_plan で既存商品を探す。無ければ作成。 */
@@ -63,14 +63,21 @@ async function ensureProduct(plan) {
   });
 }
 
-/** 商品配下に、同額・月額・JPY の有効な価格があれば再利用。無ければ作成。 */
+/**
+ * 商品配下に、同額・月額・JPY・税込の有効な価格があれば再利用。無ければ作成。
+ *
+ * tax_behavior は必ず "inclusive"（税込）にする。特商法表記と料金ページで
+ * 「¥1,480（税込）」と明示しているため、未指定のまま後から Stripe Tax を
+ * 有効化すると、同じ金額が税抜として扱われて表示と請求額が食い違う。
+ */
 async function ensurePrice(product, plan) {
   const prices = await stripe.prices.list({ product: product.id, active: true, limit: 100 });
   const match = prices.data.find(
     (p) =>
       p.currency === "jpy" &&
       p.unit_amount === plan.amount &&
-      p.recurring?.interval === "month"
+      p.recurring?.interval === "month" &&
+      p.tax_behavior === "inclusive"
   );
   if (match) return match;
   return stripe.prices.create({
@@ -78,6 +85,7 @@ async function ensurePrice(product, plan) {
     currency: "jpy",
     unit_amount: plan.amount,
     recurring: { interval: "month" },
+    tax_behavior: "inclusive",
   });
 }
 
@@ -162,7 +170,7 @@ for (const { plan, price } of results) {
 if (portalId) next = upsertEnv(next, "STRIPE_PORTAL_CONFIGURATION_ID", portalId);
 if (next !== envText) {
   writeFileSync(ENV_PATH, next);
-  console.log("\n✓ .env.local に STRIPE_PRICE_PRO / MAX / TEAM（＋ポータルID）を書き込みました。");
+  console.log("\n✓ .env.local に STRIPE_PRICE_PRO / MAX（＋ポータルID）を書き込みました。");
 } else {
   console.log("\n= .env.local は既に最新でした（変更なし）。");
 }
