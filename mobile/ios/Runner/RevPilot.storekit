@@ -51,7 +51,7 @@
               "internalID" : "PRO_M_TRIAL",
               "numberOfPeriods" : 1,
               "paymentMode" : "free",
-              "subscriptionPeriod" : "P2W"
+              "subscriptionPeriod" : "P1M"
             }
           ],
           "localizations" : [
@@ -89,7 +89,7 @@
               "internalID" : "PRO_Y_TRIAL",
               "numberOfPeriods" : 1,
               "paymentMode" : "free",
-              "subscriptionPeriod" : "P2W"
+              "subscriptionPeriod" : "P1M"
             }
           ],
           "localizations" : [

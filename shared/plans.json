@@ -21,7 +21,8 @@
       "name": "Pro",
       "tagline": "個人開発者の標準",
       "popular": true,
-      "trialDays": 14,
+      "trialLabel": "1か月",
+      "trialPeriod": "P1M",
       "features": [
         "アプリ数 無制限",
         "レビュー履歴 無期限",

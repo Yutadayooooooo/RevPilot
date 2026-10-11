@@ -35,8 +35,10 @@ export interface PlanDef {
   popular?: boolean;
   /** 販売停止中（UIに出さない）。既存契約のために定義だけ残すプラン。 */
   hidden?: boolean;
-  /** 初回購入時の無料トライアル日数（ストアの導入オファーと一致させる）。 */
-  trialDays?: number;
+  /** 初回購入時の無料トライアル期間の表示（例:「1か月」）。ストアのオファーと一致させる。 */
+  trialLabel?: string;
+  /** 同じ期間の ISO 8601 表記（例: P1M）。ストア設定と突き合わせる用。 */
+  trialPeriod?: string;
   prices?: Partial<Record<BillingPeriod, PlanPrice>>;
   /** Stripe の price ID を入れた環境変数名（現在Web決済は無効。将来用に定義だけ残す） */
   priceEnv?: "STRIPE_PRICE_PRO" | "STRIPE_PRICE_MAX" | "STRIPE_PRICE_TEAM";
@@ -49,7 +51,8 @@ interface RawPlan {
   features: string[];
   popular?: boolean;
   hidden?: boolean;
-  trialDays?: number;
+  trialLabel?: string;
+  trialPeriod?: string;
   prices?: Partial<Record<BillingPeriod, PlanPrice>>;
   priceEnv?: string;
 }
@@ -70,7 +73,8 @@ function toPlanDef(raw: RawPlan): PlanDef {
     features: raw.features,
     popular: raw.popular,
     hidden: raw.hidden,
-    trialDays: raw.trialDays,
+    trialLabel: raw.trialLabel,
+    trialPeriod: raw.trialPeriod,
     prices: raw.prices,
     priceEnv: raw.priceEnv as PlanDef["priceEnv"],
   };
@@ -97,7 +101,8 @@ function toPlanDef(raw: RawPlan): PlanDef {
  * 【2026-10 年額・無料トライアルの追加】
  *   - Pro / Max に年額（約2か月分お得）を追加。年額は解約の判断機会が年1回に減るので
  *     継続率が上がり、利用者にとっても安くなる。
- *   - Pro のみ初回14日間無料（ストアの導入オファー）。14日あれば週次サマリーが2回届き、
+ *   - Pro のみ初回1か月無料（ストアの導入オファー）。初期は利用者の獲得を優先して長めにし、
+ *     様子を見て短くする前提。1か月あれば週次サマリーが4回届き、
  *     AI返信・トピック分析を実際に使ってから判断できる。Max は Pro を入口にするため付けない。
  *
  * Team は販売停止中（hidden）。共有・権限・まとめて請求が未実装のため公開しない

@@ -54,7 +54,7 @@
 | ストアでのアプリ名 | `RevPilot - アプリレビュー管理` |
 | 端末のホーム画面での名前 | `RevPilot`（`android:label` / `CFBundleDisplayName`） |
 | 価格 | Pro ¥1,480／月・¥14,800／年、Max ¥2,980／月・¥29,800／年（いずれも税込） |
-| 無料トライアル | Pro のみ初回14日間（月額・年額とも）。Max はなし |
+| 無料トライアル | Pro のみ初回1か月（月額・年額とも）。Max はなし |
 | 連絡先 | `revpilot.hq@gmail.com` |
 | バージョン | `mobile/pubspec.yaml` の `version: 1.0.0+1` |
 
@@ -434,8 +434,8 @@ Workers の Cron Triggers でも起動はできますが、無料プランの
 
 | 参照名 | 製品ID | 期間 | 価格（日本） | 無料トライアル |
 |---|---|---|---|---|
-| RevPilot Pro | `jp.revpilot.app.pro.monthly` | 1か月 | ¥1,480 | 2週間 |
-| RevPilot Pro（年額） | `jp.revpilot.app.pro.yearly` | 1年 | ¥14,800 | 2週間 |
+| RevPilot Pro | `jp.revpilot.app.pro.monthly` | 1か月 | ¥1,480 | 1か月 |
+| RevPilot Pro（年額） | `jp.revpilot.app.pro.yearly` | 1年 | ¥14,800 | 1か月 |
 | RevPilot Max | `jp.revpilot.app.max.monthly` | 1か月 | ¥2,980 | なし |
 | RevPilot Max（年額） | `jp.revpilot.app.max.yearly` | 1年 | ¥29,800 | なし |
 
@@ -451,8 +451,8 @@ Workers の Cron Triggers でも起動はできますが、無料プランの
      - 実機で「設定 > プラン」を開いて撮ればOKです
    - **導入オファー（Pro の月額・年額の2つだけ）**: 商品ページの「サブスクリプションの価格」横の
      **⊕ > 導入オファーを作成** → 対象国: すべて ／ 開始日: 今日 ／ 終了日: なし ／
-     タイプ: **無料** ／ 期間: **2週間**
-     - アプリは「Pro は14日間無料」を `shared/plans.json` の `trialDays` から表示するので、
+     タイプ: **無料** ／ 期間: **1か月**
+     - アプリは「Pro は1か月無料」を `shared/plans.json` の `trialLabel` から表示するので、
        期間を変えるなら JSON も合わせること（表示と実際の無料期間がズレると審査で落ちる）
      - トライアルを受けられるのはグループ内で1回だけ。アプリは StoreKit に対象可否を問い合わせて、
        対象外の人には「無料」と表示しない
@@ -875,7 +875,7 @@ cd mobile && flutter build appbundle --release --dart-define-from-file=config/ap
    - 基本プランの「オファーを追加」→ オファーID: `free-trial`
    - 対象: **新規顧客の獲得 > どの定期購入も一度も購入したことがない**
      （Pro 月額と年額で2回トライアルを受けられてしまうのを防ぐ）
-   - フェーズ: **無料トライアル 14日間**（`shared/plans.json` の `trialDays` と揃える）
+   - フェーズ: **無料トライアル 1か月（P1M）**（`shared/plans.json` の `trialPeriod` と揃える。日数指定の30日ではなく「1か月」にする）
    - アプリは Play が返したオファーの有無でトライアル表示を切り替えるので、対象外の人に「無料」とは出ない
 4. 基本プラン・オファー・定期購入をすべて「**有効**」にする
 
@@ -1050,7 +1050,7 @@ Android では内部テスターアカウントでご確認いただけます。
       過大申告は審査では落ちないが、プロダクトページのプライバシー表示が実態より悪く見える。
 - [x] App ID の **Push Notifications** にチェックが入っている（2026-09-07 完了）
 - [ ] 年額2商品（`jp.revpilot.app.pro.yearly` / `jp.revpilot.app.max.yearly`）を作成し、レベルを Max=1・Pro=2 に揃える（3-6）
-- [ ] Pro の月額・年額に導入オファー（無料・2週間）を設定する（3-6）
+- [ ] Pro の月額・年額に導入オファー（無料・1か月）を設定する（3-6）
 - [ ] プラン画面のスクリーンショットを撮る（年額・トライアル表示が入った新しい画面で）
 - [ ] サブスク4商品を「提出準備完了」にする（現在は月額2商品が**提出準備中**）
       `jp.revpilot.app.pro.monthly` / `jp.revpilot.app.max.monthly` とも、価格・表示名と説明・税カテゴリは設定済み。
@@ -1082,7 +1082,7 @@ Android では内部テスターアカウントでご確認いただけます。
 > `bash scripts/cf-secrets.sh` を実行すること（空の値はスクリプトが自動で飛ばす）。
 
 - [ ] 定期購入4つ（月額・年額 × Pro・Max）と基本プランが「有効」
-- [ ] Pro の2つに無料トライアルのオファー（14日・新規顧客のみ）があり「有効」
+- [ ] Pro の2つに無料トライアルのオファー（1か月・新規顧客のみ）があり「有効」
 - [ ] サービスアカウントに「財務データ」権限がある
 - [ ] RTDN のテスト通知が届いた
 - [ ] クローズドテスト（12人×14日）の要件を確認し、必要なら開始した

@@ -9,7 +9,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../data.dart';
 import '../iap.dart';
-import '../local_notifications.dart';
 import '../plan_catalog.g.dart';
 import '../theme.dart';
 import '../ui.dart';
@@ -66,7 +65,8 @@ void showErrorWithUpgrade(
 /// 【画面の考え方】
 ///   - 冒頭で「なぜ必要か」を一文で示す（開いた理由に合わせて文言を変える）。
 ///   - 年額を初期表示にする。年額は利用者にとって安く、解約の判断が年1回になり継続率も上がる。
-///   - 無料トライアルは対象者にだけ見せ、その後いくら・いつ課金されるかをボタン直下に書く
+///   - 無料トライアルは対象者にだけ見せ、その後いくら課金されるか・無料期間中の解約なら
+///     料金がかからないことをボタン直下に書く（終了前の通知は送らず、購入時に伝えきる）
 ///     （App Store 3.1.2 は請求額を最も目立つ価格表示にすることを求めている）。
 class PlanScreen extends StatefulWidget {
   const PlanScreen({super.key, this.reason = PaywallReason.general});
@@ -122,18 +122,13 @@ class _PlanScreenState extends State<PlanScreen> {
                   );
           final name = planLabel(confirmed.plan);
           var message = result.restored ? '購入を復元しました。' : '$nameにアップグレードしました。';
-          if (confirmed.inTrial && confirmed.expiresAt != null) {
+          // トライアル開始時は、いつまで無料か・それまでに解約すれば無料であることを伝える。
+          if (confirmed.inTrial &&
+              confirmed.expiresAt != null &&
+              !result.restored) {
             final end = confirmed.expiresAt!.toLocal();
-            if (!result.restored) {
-              message =
-                  '$nameの無料トライアルを開始しました。'
-                  '${DateFormat('M月d日').format(end)}まで無料です。'
-                  '終了の2日前にお知らせします。';
-            }
-            await LocalNotifier.scheduleTrialReminder(
-              trialEndsAt: end,
-              planName: name,
-            ).catchError((_) {});
+            message = '$nameの無料トライアルを開始しました。'
+                '${DateFormat('M月d日').format(end)}までに解約すれば料金はかかりません。';
           }
           if (!mounted) return;
           setState(() {
@@ -276,7 +271,7 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   bool _trial(PlanDef p, BillingPeriod period) =>
-      _iapReady && p.trialDays != null && _iap.trialAvailable(p.key, period);
+      _iapReady && p.trialLabel != null && _iap.trialAvailable(p.key, period);
 
   int? get _maxDiscountPct {
     final values = _purchasable.map(_discountPct).whereType<int>();
@@ -587,7 +582,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 ],
                 if (trial) ...[
                   const SizedBox(width: 6),
-                  _Pill('${p.trialDays}日間無料'),
+                  _Pill('${p.trialLabel}無料'),
                 ],
               ],
             ),
@@ -643,8 +638,8 @@ class _PlanScreenState extends State<PlanScreen> {
               const SizedBox(height: 6),
               Text(
                 trial
-                    ? '${p.trialDays}日間無料、その後 $price（自動更新）。'
-                        '終了の2日前にお知らせします。無料期間中に解約すれば料金はかかりません。'
+                    ? '${p.trialLabel}無料、その後 $price（自動更新）。'
+                        '無料期間中に解約すれば料金はかかりません。'
                     : '$price（自動更新）。いつでも解約できます。',
                 textAlign: TextAlign.center,
                 style: TextStyle(
@@ -692,7 +687,7 @@ class _PlanScreenState extends State<PlanScreen> {
     }
     final label =
         trial
-            ? '${p.trialDays}日間無料で試す'
+            ? '${p.trialLabel}無料で試す'
             : (_plan == 'free' ? '${p.name}にアップグレード' : '${p.name}に変更');
     return FilledButton(
       style: FilledButton.styleFrom(
@@ -790,10 +785,10 @@ class _PlanScreenState extends State<PlanScreen> {
         Platform.isIOS
             ? '「設定 > Apple ID > サブスクリプション」'
             : 'Google Play ストアの「お支払いと定期購入 > 定期購入」';
-    final trialDays = _purchasable
-        .map((p) => p.trialDays)
-        .whereType<int>()
-        .fold<int?>(null, (a, b) => a == null || b > a ? b : a);
+    final trial = _purchasable
+        .map((p) => p.trialLabel)
+        .whereType<String>()
+        .firstOrNull;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -803,10 +798,10 @@ class _PlanScreenState extends State<PlanScreen> {
       child: Text(
         'サブスクリプションは月額または年額で、選択した期間ごとに自動更新されます。'
         'お支払いは購入確定時に$storeへ請求されます。'
-        '${trialDays != null ? '無料トライアルの対象となる方は、無料期間（$trialDays日間）の終了時に初回の料金が請求されます。無料トライアルはお一人様1回限りです。' : ''}'
+        '${trial != null ? '無料トライアルの対象となる方は、無料期間（$trial）の終了時に初回の料金が請求されます。無料トライアルはお一人様1回限りです。' : ''}'
         '解約しない限り期間終了時に自動更新され、更新料は現在の期間終了の24時間前に請求されます。'
         '自動更新は購入後、$pathからいつでも解約できます。'
-        '${trialDays != null ? '無料期間中に解約した場合、料金はかかりません。' : ''}'
+        '${trial != null ? '無料期間中に解約した場合、料金はかかりません。' : ''}'
         '解約後も、その課金期間の終了までは有料機能をご利用いただけます。',
         style: TextStyle(fontSize: 12, color: context.subtleC, height: 1.5),
       ),

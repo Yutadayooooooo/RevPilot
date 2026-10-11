@@ -6,8 +6,6 @@
     <uses-permission android:name="com.android.vending.BILLING"/>
     <!-- 通信（http パッケージ / Supabase / ストアAPI） -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- 予約通知（トライアル終了前のお知らせ）を端末の再起動後も残すため -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
         android:label="RevPilot"
         android:name="${applicationName}"
@@ -34,16 +32,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- flutter_local_notifications の予約通知（トライアル終了前のお知らせ）に必要 -->
-        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
-        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
-                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
-                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
-            </intent-filter>
-        </receiver>
         <!-- リモートpush(FCM)がバックグラウンドで表示するときの通知チャンネル。
              アプリを一度も起動していない状態でも通知が届くため、
              チャンネルの指定が無いと「その他」扱いになり重要度が下がる。

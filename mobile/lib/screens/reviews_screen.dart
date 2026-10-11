@@ -443,8 +443,8 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   /// 「Proは初回◯日間無料」の一文（トライアルを設定していなければ空）。
   /// 対象かどうかはストアに聞かないと分からないので「対象の方のみ」と添える。
   String _proTrialNote() {
-    final days = planDef('pro').trialDays;
-    return days == null ? '' : 'Proは初回$days日間無料でお試しいただけます（対象の方のみ）。';
+    final trial = planDef('pro').trialLabel;
+    return trial == null ? '' : 'Proは初回$trial無料でお試しいただけます（対象の方のみ）。';
   }
 
   // ---- 一括AI返信（プラン別ゲート） ----

@@ -33,7 +33,7 @@ const plans = catalog.plans
     features: [${p.features.map(str).join(", ")}],
     popular: ${Boolean(p.popular)},
     hidden: ${Boolean(p.hidden)},
-    trialDays: ${opt(p.trialDays)},
+    trialLabel: ${p.trialLabel ? str(p.trialLabel) : "null"},
     monthly: ${price(p.prices?.monthly)},
     yearly: ${price(p.prices?.yearly)},
     limits: PlanLimits(
@@ -92,8 +92,8 @@ class PlanDef {
   final bool popular;
   final bool hidden;
 
-  /// 初回購入時の無料トライアル日数（ストアの導入オファーと一致）。
-  final int? trialDays;
+  /// 初回購入時の無料トライアルの期間の表示（例: 1か月）。ストアのオファーと一致させる。
+  final String? trialLabel;
   final PlanPrice? monthly;
   final PlanPrice? yearly;
   final PlanLimits limits;
@@ -105,7 +105,7 @@ class PlanDef {
     required this.features,
     required this.popular,
     required this.hidden,
-    required this.trialDays,
+    required this.trialLabel,
     required this.monthly,
     required this.yearly,
     required this.limits,

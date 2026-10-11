@@ -34,7 +34,7 @@ export default function TokushohoPage() {
               <div key={p.key}>
                 {p.name}：{p.prices?.monthly ? `月額 ${p.price.replace("/月", "")}（税込）` : "¥0"}
                 {p.yearlyPrice && ` / 年額 ${p.yearlyPrice.replace("/年", "")}（税込）`}
-                {p.trialDays && `　※初回${p.trialDays}日間無料（お一人様1回限り）`}
+                {p.trialLabel && `　※初回${p.trialLabel}無料（お一人様1回限り）`}
               </div>
             ))}
             <div className="text-sm text-slate-500">

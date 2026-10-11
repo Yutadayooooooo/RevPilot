@@ -169,7 +169,7 @@ class IapService {
   Future<void> _loadIntroEligibility() async {
     _introEligible.clear();
     for (final p in planCatalog) {
-      if (p.trialDays == null) continue;
+      if (p.trialLabel == null) continue;
       for (final id in productIds[p.key]?.values ?? const <String>[]) {
         if (!_products.containsKey(id)) continue;
         try {

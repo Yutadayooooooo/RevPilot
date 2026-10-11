@@ -42,8 +42,8 @@ class PlanDef {
   final bool popular;
   final bool hidden;
 
-  /// 初回購入時の無料トライアル日数（ストアの導入オファーと一致）。
-  final int? trialDays;
+  /// 初回購入時の無料トライアルの期間の表示（例: 1か月）。ストアのオファーと一致させる。
+  final String? trialLabel;
   final PlanPrice? monthly;
   final PlanPrice? yearly;
   final PlanLimits limits;
@@ -55,7 +55,7 @@ class PlanDef {
     required this.features,
     required this.popular,
     required this.hidden,
-    required this.trialDays,
+    required this.trialLabel,
     required this.monthly,
     required this.yearly,
     required this.limits,
@@ -70,7 +70,7 @@ const List<PlanDef> planCatalog = [
     features: ['1アプリ', 'レビュー履歴 30日', 'AI返信 月3件', '自動取得 毎時・新着通知'],
     popular: false,
     hidden: false,
-    trialDays: null,
+    trialLabel: null,
     monthly: null,
     yearly: null,
     limits: PlanLimits(
@@ -89,7 +89,7 @@ const List<PlanDef> planCatalog = [
     features: ['アプリ数 無制限', 'レビュー履歴 無期限', 'AI返信 月300件', '一括返信 最大20件', 'トピック分析', '週次サマリー'],
     popular: true,
     hidden: false,
-    trialDays: 14,
+    trialLabel: '1か月',
     monthly: PlanPrice(yen: 1480, productId: 'jp.revpilot.app.pro.monthly'),
     yearly: PlanPrice(yen: 14800, productId: 'jp.revpilot.app.pro.yearly'),
     limits: PlanLimits(
@@ -108,7 +108,7 @@ const List<PlanDef> planCatalog = [
     features: ['Pro のすべて', 'AI返信 月1,000件', '一括返信 最大50件', '優先サポート'],
     popular: false,
     hidden: false,
-    trialDays: null,
+    trialLabel: null,
     monthly: PlanPrice(yen: 2980, productId: 'jp.revpilot.app.max.monthly'),
     yearly: PlanPrice(yen: 29800, productId: 'jp.revpilot.app.max.yearly'),
     limits: PlanLimits(
@@ -127,7 +127,7 @@ const List<PlanDef> planCatalog = [
     features: ['Maxの全機能', '複数メンバーで共有', 'メンバー別の権限・履歴', 'まとめて請求'],
     popular: false,
     hidden: true,
-    trialDays: null,
+    trialLabel: null,
     monthly: PlanPrice(yen: 5800, productId: null),
     yearly: null,
     limits: PlanLimits(
