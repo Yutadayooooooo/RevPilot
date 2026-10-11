@@ -478,6 +478,9 @@ Workers の Cron Triggers でも起動はできますが、無料プランの
    - ただし既存の Apple ID と重複しないアドレスにしてください
 3. 実機の「設定 > Developer > Sandbox Apple Account」でこのアカウントにサインインしてから購入テストします
    - **本物の Apple ID でサインインしないでください**（実際に課金されます）
+4. 解約のテスト: アプリの「設定 > プラン > サブスクリプションを管理・解約」で、アプリ内に Apple の管理シートが開きます。
+   - 端末側からは「設定 > Developer > Sandbox Apple Account > 管理」でも解約・変更できます
+   - Sandbox の購読は apps.apple.com のサブスクリプション画面には**表示されません**（本番の購読だけが出る）
 
 ### 3-8. App Store Server API のキーを作る（購入の検証に必須）【完了済み】
 

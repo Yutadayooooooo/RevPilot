@@ -223,14 +223,35 @@ class _PlanScreenState extends State<PlanScreen> {
   /// アプリ内課金の契約は各ストアの管理下にあり、こちらからは解約できない。
   /// 必ずストアの管理画面へ案内する（以前はStripeのポータルを開こうとして、
   /// IAP契約者には「Stripe顧客が未作成です」というエラーが出ていた）。
+  ///
+  /// iOS はアプリ内の StoreKit シート（AppStore.showManageSubscriptions）を優先する。
+  /// apps.apple.com のURLはアプリの外へ出てしまううえ、Sandbox の購読は表示されない
+  /// （テスト時に「App Storeが開くだけで何も起きない」状態になっていた）。
+  /// シートを出せなかったときだけURLにフォールバックする。
   Future<void> _manage() async {
     HapticFeedback.lightImpact();
-    final uri =
-        Platform.isIOS
-            ? Uri.parse('https://apps.apple.com/account/subscriptions')
-            : Uri.parse('https://play.google.com/store/account/subscriptions');
+    if (Platform.isIOS) {
+      bool shown = false;
+      try {
+        shown = await _subscriptionsChannel.invokeMethod<bool>(
+              'showManageSubscriptions',
+            ) ??
+            false;
+      } catch (_) {}
+      if (shown) {
+        // シートで解約・変更された可能性があるので、閉じたらプランを読み直す。
+        await _load();
+        return;
+      }
+    }
+    final uri = Platform.isIOS
+        ? Uri.parse('https://apps.apple.com/account/subscriptions')
+        : Uri.parse('https://play.google.com/store/account/subscriptions');
     await _openUrl(uri, external: true);
   }
+
+  /// ios/Runner/AppDelegate.swift のサブスク管理シート用チャンネル。
+  static const _subscriptionsChannel = MethodChannel('revpilot/subscriptions');
 
   // ---- 価格の表示 ----
   //
@@ -319,10 +340,13 @@ class _PlanScreenState extends State<PlanScreen> {
                       const SizedBox(height: 20),
                       OutlinedButton.icon(
                         onPressed: _manage,
-                        icon: const Icon(Icons.open_in_new, size: 18),
+                        icon: Icon(
+                          Platform.isIOS ? Icons.manage_accounts : Icons.open_in_new,
+                          size: 18,
+                        ),
                         label: Text(
                           Platform.isIOS
-                              ? 'サブスクリプションを管理・解約（App Store）'
+                              ? 'サブスクリプションを管理・解約'
                               : '定期購入を管理・解約（Google Play）',
                         ),
                       ),
@@ -737,7 +761,7 @@ class _PlanScreenState extends State<PlanScreen> {
                 TextButton(
                   onPressed: _manage,
                   child: Text(
-                    Platform.isIOS ? '解約手続き（App Store）' : '解約手続き（Google Play）',
+                    Platform.isIOS ? '解約手続き' : '解約手続き（Google Play）',
                   ),
                 ),
             ],
