@@ -4,16 +4,30 @@
  * ここは Stripe SDK に依存させない。クライアントコンポーネントから読むため、
  * lib/stripe.ts に置くと Node向けの Stripe SDK がブラウザのバンドルに巻き込まれる。
  *
- * 数値は lib/plan.ts の PLAN_LIMITS と必ず一致させること。
+ * 定義の実体は shared/plans.json。Flutter 側（mobile/lib/plan_catalog.g.dart）も
+ * 同じ JSON から生成しているので、プラン名・価格・特徴・上限・商品IDはそちらだけを変更する。
  */
+import catalog from "@/shared/plans.json";
 
 export type PlanKey = "free" | "pro" | "max" | "team";
+export type BillingPeriod = "monthly" | "yearly";
+
+export interface PlanPrice {
+  /** 税込の円。ストア側の価格と一致させる（表示はストアが返す価格を優先）。 */
+  yen: number;
+  /** App Store / Google Play 共通の商品ID。未販売なら null。 */
+  productId: string | null;
+}
 
 export interface PlanDef {
   key: PlanKey;
   name: string;
-  /** 表示用の価格ラベル */
+  /** 表示用の価格ラベル（月額） */
   price: string;
+  /** 年額の表示ラベル（年額を販売していなければ undefined） */
+  yearlyPrice?: string;
+  /** 年額を月額12か月と比べたときの割引率（%）。 */
+  yearlyDiscountPct?: number;
   /** カード上部に置く一言。「誰向けか」を先に示す。 */
   tagline: string;
   features: string[];
@@ -21,8 +35,45 @@ export interface PlanDef {
   popular?: boolean;
   /** 販売停止中（UIに出さない）。既存契約のために定義だけ残すプラン。 */
   hidden?: boolean;
+  /** 初回購入時の無料トライアル日数（ストアの導入オファーと一致させる）。 */
+  trialDays?: number;
+  prices?: Partial<Record<BillingPeriod, PlanPrice>>;
   /** Stripe の price ID を入れた環境変数名（現在Web決済は無効。将来用に定義だけ残す） */
   priceEnv?: "STRIPE_PRICE_PRO" | "STRIPE_PRICE_MAX" | "STRIPE_PRICE_TEAM";
+}
+
+interface RawPlan {
+  key: string;
+  name: string;
+  tagline: string;
+  features: string[];
+  popular?: boolean;
+  hidden?: boolean;
+  trialDays?: number;
+  prices?: Partial<Record<BillingPeriod, PlanPrice>>;
+  priceEnv?: string;
+}
+
+const yen = (n: number) => `¥${n.toLocaleString("en-US")}`;
+
+function toPlanDef(raw: RawPlan): PlanDef {
+  const monthly = raw.prices?.monthly;
+  const yearly = raw.prices?.yearly;
+  return {
+    key: raw.key as PlanKey,
+    name: raw.name,
+    price: monthly ? `${yen(monthly.yen)}/月` : "¥0",
+    yearlyPrice: yearly ? `${yen(yearly.yen)}/年` : undefined,
+    yearlyDiscountPct:
+      monthly && yearly ? Math.round((1 - yearly.yen / (monthly.yen * 12)) * 100) : undefined,
+    tagline: raw.tagline,
+    features: raw.features,
+    popular: raw.popular,
+    hidden: raw.hidden,
+    trialDays: raw.trialDays,
+    prices: raw.prices,
+    priceEnv: raw.priceEnv as PlanDef["priceEnv"],
+  };
 }
 
 /**
@@ -42,61 +93,29 @@ export interface PlanDef {
  *   - Free でも30日は見える（Google Play の7日より価値がある＝無料でも役に立つ）
  *   - 31日目に「先月のレビューが見られない」で初めて壁に当たる
  *   - 原価ゼロで効く壁（データは消さずに見せないだけ。課金すれば即座に全部見える）
+ *
+ * 【2026-10 年額・無料トライアルの追加】
+ *   - Pro / Max に年額（約2か月分お得）を追加。年額は解約の判断機会が年1回に減るので
+ *     継続率が上がり、利用者にとっても安くなる。
+ *   - Pro のみ初回14日間無料（ストアの導入オファー）。14日あれば週次サマリーが2回届き、
+ *     AI返信・トピック分析を実際に使ってから判断できる。Max は Pro を入口にするため付けない。
+ *
+ * Team は販売停止中（hidden）。共有・権限・まとめて請求が未実装のため公開しない
+ * （未実装機能の販売は景表法／ストア審査の両面でリスク）。実装が入るまで hidden のままにする。
  */
-export const PLANS: PlanDef[] = [
-  {
-    key: "free",
-    name: "Free",
-    price: "¥0",
-    tagline: "まず1本のアプリで試す",
-    features: [
-      "1アプリ",
-      "レビュー履歴 30日",
-      "AI返信 月3件",
-      "自動取得 毎時・新着通知",
-    ],
-  },
-  {
-    key: "pro",
-    name: "Pro",
-    price: "¥1,480/月",
-    tagline: "個人開発者の標準",
-    popular: true,
-    features: [
-      "アプリ数 無制限",
-      "レビュー履歴 無期限",
-      "AI返信 月300件",
-      "一括返信 最大20件",
-      "トピック分析",
-      "週次サマリー",
-    ],
-    priceEnv: "STRIPE_PRICE_PRO",
-  },
-  {
-    key: "max",
-    name: "Max",
-    price: "¥2,980/月",
-    tagline: "レビューが多い・返信量が多い方へ",
-    features: [
-      "Pro のすべて",
-      "AI返信 月1,000件",
-      "一括返信 最大50件",
-      "優先サポート",
-    ],
-    priceEnv: "STRIPE_PRICE_MAX",
-  },
-  // 販売停止中。共有・権限・まとめて請求が未実装のため公開しない（未実装機能の販売は
-  // 景表法／ストア審査の両面でリスク）。実装が入るまで hidden のままにする。
-  {
-    key: "team",
-    name: "Team",
-    price: "¥5,800/月",
-    tagline: "チームで運用する",
-    hidden: true,
-    features: ["Maxの全機能", "複数メンバーで共有", "メンバー別の権限・履歴", "まとめて請求"],
-    priceEnv: "STRIPE_PRICE_TEAM",
-  },
-];
+export const PLANS: PlanDef[] = (catalog.plans as RawPlan[]).map(toPlanDef);
+
+/**
+ * ストア商品ID → プラン。iOS / Android で同じIDを使う。
+ * サーバーの購入検証（lib/iap-apple.ts / lib/iap-google.ts）はここだけを参照する。
+ */
+export const STORE_PRODUCT_TO_PLAN: Record<string, PlanKey> = Object.fromEntries(
+  PLANS.flatMap((p) =>
+    Object.values(p.prices ?? {})
+      .filter((v): v is PlanPrice => Boolean(v?.productId))
+      .map((v) => [v.productId as string, p.key])
+  )
+);
 
 /** 公開中（購入可能）のプランのみ。UIはこちらを使う。 */
 export const PUBLIC_PLANS: PlanDef[] = PLANS.filter((p) => !p.hidden);

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../data.dart';
+import 'plan_screen.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../ui.dart';
@@ -149,7 +150,7 @@ class _AppEditScreenState extends State<AppEditScreen> {
       HapticFeedback.lightImpact();
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
+      if (mounted) showErrorWithUpgrade(context, e, reason: PaywallReason.apps);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

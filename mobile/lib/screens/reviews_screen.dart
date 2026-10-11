@@ -213,9 +213,9 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
           ),
           const SizedBox(height: 10),
           FilledButton.tonal(
-            onPressed: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const PlanScreen())),
-            child: const Text('プランを見る'),
+            onPressed: () =>
+                openPlanScreen(context, reason: PaywallReason.history),
+            child: const Text('全期間を見る方法'),
           ),
         ],
       ),
@@ -440,6 +440,13 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
     });
   }
 
+  /// 「Proは初回◯日間無料」の一文（トライアルを設定していなければ空）。
+  /// 対象かどうかはストアに聞かないと分からないので「対象の方のみ」と添える。
+  String _proTrialNote() {
+    final days = planDef('pro').trialDays;
+    return days == null ? '' : 'Proは初回$days日間無料でお試しいただけます（対象の方のみ）。';
+  }
+
   // ---- 一括AI返信（プラン別ゲート） ----
   Future<void> _bulkAction() async {
     HapticFeedback.selectionClick();
@@ -451,9 +458,10 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('一括返信はProプランから'),
-          content: const Text(
-              'Proは一度に最大20件、Maxは最大50件をまとめてAI返信できます。'
-              'アップグレードしますか？'),
+          content: Text(
+              'Proは一度に最大${planBulkLimit('pro')}件、'
+              'Maxは最大${planBulkLimit('max')}件をまとめてAI返信できます。'
+              '${_proTrialNote()}'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
@@ -465,8 +473,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         ),
       );
       if (go == true && mounted) {
-        Navigator.of(context)
-            .push(MaterialPageRoute(builder: (_) => const PlanScreen()));
+        await openPlanScreen(context, reason: PaywallReason.bulk);
       }
       return;
     }

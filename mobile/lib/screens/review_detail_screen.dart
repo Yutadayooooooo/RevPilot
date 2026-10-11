@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../data.dart';
+import 'plan_screen.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../ui.dart';
@@ -66,7 +67,9 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
         showSnack(context, 'AIが返信を生成しました', kind: SnackKind.success);
       }
     } catch (e) {
-      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
+      if (mounted) {
+        showErrorWithUpgrade(context, e, reason: PaywallReason.aiQuota);
+      }
     } finally {
       if (mounted) setState(() => _generating = false);
     }

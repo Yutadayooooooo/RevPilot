@@ -1,5 +1,6 @@
 import { P, LegalFooter } from "../_ui";
 import { BUSINESS, SITE_URL } from "@/lib/site";
+import { PUBLIC_PLANS } from "@/lib/plans";
 import type { ReactNode } from "react";
 
 export const metadata = { title: "特定商取引法に基づく表記 — RevPilot" };
@@ -29,9 +30,13 @@ export default function TokushohoPage() {
         <Row label="販売URL">{SITE_URL}</Row>
         <Row label="販売価格">
           <div className="space-y-1">
-            <div>Free：¥0</div>
-            <div>Pro：月額 ¥1,480（税込）</div>
-            <div>Max：月額 ¥2,980（税込）</div>
+            {PUBLIC_PLANS.map((p) => (
+              <div key={p.key}>
+                {p.name}：{p.prices?.monthly ? `月額 ${p.price.replace("/月", "")}（税込）` : "¥0"}
+                {p.yearlyPrice && ` / 年額 ${p.yearlyPrice.replace("/年", "")}（税込）`}
+                {p.trialDays && `　※初回${p.trialDays}日間無料（お一人様1回限り）`}
+              </div>
+            ))}
             <div className="text-sm text-slate-500">
               ※各プランの内容・最新価格は
               <a href="/pricing" className="underline">料金プラン</a>
@@ -47,7 +52,8 @@ export default function TokushohoPage() {
           お支払いは Apple ID / Google アカウントに登録された支払い方法に請求されます。
         </Row>
         <Row label="支払時期">
-          サブスクリプションのお申し込み時に初回課金し、以後は解約されない限り各期間の満了時に自動更新・課金します。
+          サブスクリプションのお申し込み時に初回課金し、以後は解約されない限り各期間（1か月または1年）の満了時に自動更新・課金します。
+          無料トライアルの対象となる場合は、無料期間の終了時に初回課金します（無料期間中に解約した場合は課金されません）。
         </Row>
         <Row label="サービスの提供時期">
           決済完了後、速やかに有料機能をご利用いただけます。
@@ -99,7 +105,7 @@ export default function TokushohoPage() {
         </Row>
       </dl>
 
-      <LegalFooter updated="2026年9月7日" />
+      <LegalFooter updated="2026年10月11日" />
     </>
   );
 }

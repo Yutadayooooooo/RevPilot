@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import type { PlanKey } from "@/lib/plans";
+import { STORE_PRODUCT_TO_PLAN, type PlanKey } from "@/lib/plans";
 
 /**
  * App内課金（Apple）まわりのサーバー処理。
@@ -15,11 +15,8 @@ import type { PlanKey } from "@/lib/plans";
  * 鍵（APPLE_IAP_*）が未設定の環境では 501 で穏やかに縮退する。
  */
 
-/** ストア商品ID → プラン。iap.dart / RevPilot.storekit と一致させる。 */
-const APPLE_PRODUCT_TO_PLAN: Record<string, PlanKey> = {
-  "jp.revpilot.app.pro.monthly": "pro",
-  "jp.revpilot.app.max.monthly": "max",
-};
+/** ストア商品ID → プラン。定義は shared/plans.json（RevPilot.storekit と App Store Connect も一致させる）。 */
+const APPLE_PRODUCT_TO_PLAN = STORE_PRODUCT_TO_PLAN;
 
 const PROD_BASE = "https://api.storekit.itunes.apple.com";
 const SANDBOX_BASE = "https://api.storekit-sandbox.itunes.apple.com";
@@ -122,6 +119,17 @@ export interface AppleTransaction {
   expiresDate?: number; // ms epoch
   revocationDate?: number;
   type?: string;
+  /** 1 = 導入オファー（無料トライアル等）、2 = プロモーション、3 = オファーコード */
+  offerType?: number;
+  /** "FREE_TRIAL" | "PAY_AS_YOU_GO" | "PAY_UP_FRONT" */
+  offerDiscountType?: string;
+}
+
+/** 無料トライアル期間中のトランザクションか。 */
+function isFreeTrial(tx: AppleTransaction): boolean {
+  if (tx.offerType !== 1) return false;
+  // 古い形式のトランザクションには offerDiscountType が無い。導入オファーは無料トライアルしか作っていない。
+  return !tx.offerDiscountType || tx.offerDiscountType === "FREE_TRIAL";
 }
 
 export interface AppleVerifyInput {
@@ -138,6 +146,8 @@ export interface AppleVerifyResult {
   transactionId: string | null;
   originalTransactionId: string | null;
   expiresAt: Date | null;
+  /** 無料トライアル中か（アプリ側でトライアル終了前の通知を予約するのに使う）。 */
+  inTrial: boolean;
 }
 
 /** Appleが返したトランザクションを検証してプランを決める。 */
@@ -184,6 +194,7 @@ export async function verifyAppleTransaction(
       transactionId: tx.transactionId ?? txId,
       originalTransactionId: tx.originalTransactionId ?? null,
       expiresAt: tx.expiresDate ? new Date(tx.expiresDate) : null,
+      inTrial: isFreeTrial(tx),
     };
   }
 
@@ -197,6 +208,7 @@ export async function verifyAppleTransaction(
       originalTransactionId: null,
       // 開発用途では30日後を仮の期限にしておく（本番では必ずAppleの値を使う）
       expiresAt: new Date(Date.now() + 30 * 86_400_000),
+      inTrial: false,
     };
   }
 

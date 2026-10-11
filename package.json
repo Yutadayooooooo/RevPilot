@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "gen:plans": "node scripts/gen-plans.mjs",
+    "check:plans": "node scripts/gen-plans.mjs --check",
     "setup:stripe": "node scripts/setup-stripe.mjs",
     "test:pipeline": "node --env-file=.env.local scripts/test-review-pipeline.mjs",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",

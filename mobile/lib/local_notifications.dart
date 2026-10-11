@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import 'models.dart';
 
@@ -119,6 +120,51 @@ class LocalNotifier {
           presentSound: true,
         ),
       ),
+    );
+  }
+
+  /// トライアル終了のお知らせの通知ID（1件だけ予約し、再購入時は上書きする）。
+  static const _trialReminderId = 0x7e1a1;
+
+  /// 無料トライアルが終わる2日前にお知らせを予約する。
+  ///
+  /// ストアはトライアル終了時に自動で課金を始めるが、事前に知らせてはくれない。
+  /// 「気づいたら課金されていた」は返金依頼と低評価レビューの典型的な原因なので、
+  /// 続けるかどうかを判断できるタイミングでこちらから知らせる。
+  static Future<void> scheduleTrialReminder({
+    required DateTime trialEndsAt,
+    required String planName,
+  }) async {
+    final at = trialEndsAt.toUtc().subtract(const Duration(days: 2));
+    if (at.isBefore(DateTime.now().toUtc())) return;
+    await init();
+    final manage = Platform.isIOS
+        ? '「設定 > Apple ID > サブスクリプション」'
+        : 'Google Play の「定期購入」';
+    await _plugin.zonedSchedule(
+      _trialReminderId,
+      '$planNameの無料期間はあと2日です',
+      '続ける場合は手続き不要です。不要なら$manageから解約すると料金はかかりません。',
+      tz.TZDateTime.from(at, tz.UTC),
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _channelId,
+          _channelName,
+          channelDescription: _channelDesc,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBanner: true,
+          presentSound: true,
+        ),
+      ),
+      // 正確な時刻は不要（数分ずれても問題ない）。exact にすると Android 14+ で
+      // SCHEDULE_EXACT_ALARM の許可が必要になるため使わない。
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 }

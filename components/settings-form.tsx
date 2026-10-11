@@ -9,6 +9,7 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import type { AppRow, NotifyPrefs, UsageInfo } from "@/lib/settings-data";
 import { PUBLIC_PLANS } from "@/lib/plans";
+import { PlanExtras } from "@/components/plan-extras";
 
 const TONES = [
   { value: "polite", label: "丁寧（敬語）" },
@@ -371,6 +372,7 @@ function PlanCard({
                   {current ? <Badge>現在</Badge> : p.popular ? <Badge tone="muted">おすすめ</Badge> : null}
                 </div>
                 <div className="my-2 text-lg font-semibold">{p.price}</div>
+                <PlanExtras plan={p} className="text-xs text-muted-foreground" />
                 <p className="mb-2 text-xs text-muted-foreground">{p.tagline}</p>
                 <ul className="space-y-1 text-xs text-muted-foreground">
                   {p.features.map((f) => (
@@ -386,7 +388,7 @@ function PlanCard({
 
         <p className="text-xs text-muted-foreground">
           プランの変更・解約は iOS / Android アプリの「設定 &gt; プラン」から行えます。
-          サブスクは解約しない限り毎月自動更新されます。詳細は
+          サブスクは解約しない限り、選んだ周期（月額・年額）ごとに自動更新されます。詳細は
           <Link href="/terms" className="underline">利用規約</Link>と
           <Link href="/tokushoho" className="underline">特定商取引法に基づく表記</Link>
           をご確認ください。

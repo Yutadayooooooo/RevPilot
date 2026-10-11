@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PUBLIC_PLANS } from "@/lib/plans";
+import { PlanExtras } from "@/components/plan-extras";
 import { BUSINESS } from "@/lib/site";
 
 export const metadata = {
@@ -127,6 +128,7 @@ export default function LandingPage() {
                   )}
                 </div>
                 <div className="my-1.5 text-lg font-semibold text-indigo-600">{p.price}</div>
+                <PlanExtras plan={p} />
                 <p className="mb-3 text-xs text-slate-500">{p.tagline}</p>
                 <ul className="space-y-1 text-sm text-slate-600">
                   {p.features.map((f) => (

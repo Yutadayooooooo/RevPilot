@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PUBLIC_PLANS } from "@/lib/plans";
+import { PlanExtras } from "@/components/plan-extras";
 import { BUSINESS } from "@/lib/site";
 import { LegalFooter } from "../_ui";
 
@@ -15,6 +16,8 @@ export const metadata = {
  * 必要があった（＝検討段階の人が価格を確認できない）。
  * 特商法表記からも参照される公開ページとして用意する。
  */
+const PRO = PUBLIC_PLANS.find((p) => p.key === "pro");
+
 export default function PricingPage() {
   return (
     <>
@@ -41,6 +44,7 @@ export default function PricingPage() {
               )}
             </div>
             <div className="my-1.5 text-xl font-semibold text-indigo-600">{p.price}</div>
+            <PlanExtras plan={p} />
             <p className="mb-3 text-xs text-slate-500">{p.tagline}</p>
             <ul className="space-y-1.5 text-sm text-slate-600">
               {p.features.map((f) => (
@@ -55,7 +59,7 @@ export default function PricingPage() {
       </div>
 
       <p className="mt-4 text-xs text-slate-500">
-        価格はすべて税込です。サブスクリプションは解約しない限り毎月自動更新され、更新日に課金されます。
+        価格はすべて税込です。サブスクリプションは月額または年額で、解約しない限り選んだ周期ごとに自動更新され、更新日に課金されます。
       </p>
 
       <div className="mt-8">
@@ -74,6 +78,18 @@ export default function PricingPage() {
           Android は Google Play ストアの「お支払いと定期購入 &gt; 定期購入」から、いつでも解約できます
           （アプリ内の「設定 &gt; プラン」からもこの画面を開けます）。
           解約後も、その課金期間の終了までは有料機能をご利用いただけます。
+        </Faq>
+        {PRO?.trialDays && (
+        <Faq q="無料トライアルはありますか？">
+          Pro は初回のみ{PRO.trialDays}日間無料でお試しいただけます（月額・年額とも）。
+          無料期間が終わると選んだプランの料金で自動的に開始されますが、
+          終了の2日前にアプリからお知らせし、無料期間中に解約すれば料金は一切かかりません。
+          トライアルは App Store / Google Play のアカウントごとに1回限りです。
+        </Faq>
+        )}
+        <Faq q="月額と年額の違いは？">
+          機能は同じです。年額は月額の約10か月分の料金で1年間ご利用いただけます。
+          途中で月額から年額へ（またはその逆へ）切り替えることもできます。
         </Faq>
         <Faq q="Free の「レビュー履歴 30日」とは？">
           Free プランでは、直近30日ぶんのレビューを表示します。
@@ -109,7 +125,7 @@ export default function PricingPage() {
         </Faq>
       </dl>
 
-      <LegalFooter updated="2026年9月7日" />
+      <LegalFooter updated="2026年10月11日" />
     </>
   );
 }

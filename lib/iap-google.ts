@@ -1,5 +1,5 @@
 import { GoogleAuth } from "google-auth-library";
-import type { PlanKey } from "@/lib/plans";
+import { STORE_PRODUCT_TO_PLAN, type PlanKey } from "@/lib/plans";
 
 /**
  * Google Play Billing（Android のアプリ内課金）のサーバー処理。
@@ -18,11 +18,8 @@ import type { PlanKey } from "@/lib/plans";
 const SCOPE = "https://www.googleapis.com/auth/androidpublisher";
 const API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications";
 
-/** ストア商品ID → プラン。mobile/lib/iap.dart と Play Console の商品IDに一致させる。 */
-const GOOGLE_PRODUCT_TO_PLAN: Record<string, PlanKey> = {
-  "jp.revpilot.app.pro.monthly": "pro",
-  "jp.revpilot.app.max.monthly": "max",
-};
+/** ストア商品ID → プラン。定義は shared/plans.json（Play Console の商品IDも一致させる）。 */
+const GOOGLE_PRODUCT_TO_PLAN = STORE_PRODUCT_TO_PLAN;
 
 /** HTTPステータス付きのIAPエラー。route側でそのまま応答に使う。 */
 export class GoogleIapError extends Error {
@@ -78,6 +75,8 @@ export interface GoogleSubscriptionState {
   purchaseToken: string;
   /** 未確認(acknowledge前)の購入か。3日以内に確認しないと自動返金される。 */
   needsAcknowledgement: boolean;
+  /** 無料トライアル期間中か（lineItems[].offerPhase.freeTrial）。 */
+  inTrial: boolean;
 }
 
 /** 有効とみなす購読状態。猶予期間(GRACE_PERIOD)も利用継続を許す。 */
@@ -136,6 +135,7 @@ export async function getGoogleSubscriptionState(
     expiresAt,
     purchaseToken,
     needsAcknowledgement: json?.acknowledgementState === "ACKNOWLEDGEMENT_STATE_PENDING",
+    inTrial: Boolean(line.offerPhase?.freeTrial),
   };
 }
 

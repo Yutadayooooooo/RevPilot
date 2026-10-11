@@ -98,5 +98,6 @@ export async function POST(req: NextRequest) {
     plan: state.plan,
     method: "google-play-developer-api",
     expiresAt: state.expiresAt?.toISOString() ?? null,
+    inTrial: state.inTrial,
   });
 }
