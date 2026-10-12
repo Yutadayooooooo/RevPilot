@@ -46,12 +46,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_sendingTest) return;
     setState(() => _sendingTest = true);
     try {
+      // 登録に失敗したままの端末でも、ここで登録し直してから送る。
+      await PushService.registerForCurrentUser();
       await Repo.sendTestPush();
       if (mounted) {
         showSnack(context, 'テスト通知を送信しました', kind: SnackKind.success);
       }
     } catch (e) {
-      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
+      // 端末側で登録に失敗した理由があれば添える（サーバーの文言だけでは原因が分からない）。
+      final reason = PushService.lastError;
+      final msg = reason == null ? '$e' : '$e\n（端末側: $reason）';
+      if (mounted) showSnack(context, msg, kind: SnackKind.error);
     } finally {
       if (mounted) setState(() => _sendingTest = false);
     }
