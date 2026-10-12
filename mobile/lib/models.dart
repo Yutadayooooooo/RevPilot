@@ -8,6 +8,11 @@ class AppRow {
   final String? description;
   final String replyTone;
 
+  /// 返信スタイル（AI返信の書き出し・結び・ルール）。未設定は null。
+  final String? replyOpening;
+  final String? replyClosing;
+  final String? replyRules;
+
   AppRow({
     required this.id,
     required this.store,
@@ -15,6 +20,9 @@ class AppRow {
     required this.name,
     this.description,
     required this.replyTone,
+    this.replyOpening,
+    this.replyClosing,
+    this.replyRules,
   });
 
   factory AppRow.fromJson(Map<String, dynamic> j) => AppRow(
@@ -24,7 +32,14 @@ class AppRow {
         name: j['name'] as String,
         description: j['description'] as String?,
         replyTone: (j['reply_tone'] as String?) ?? 'polite',
+        replyOpening: j['reply_opening'] as String?,
+        replyClosing: j['reply_closing'] as String?,
+        replyRules: j['reply_rules'] as String?,
       );
+
+  /// 返信スタイルを1つでも設定しているか。
+  bool get hasReplyStyle => [replyOpening, replyClosing, replyRules]
+      .any((s) => s != null && s.trim().isNotEmpty);
 
   String get storeLabel => store == 'appstore' ? 'App Store' : 'Google Play';
 }
@@ -171,3 +186,114 @@ const topicLabels = {
   'praise': '称賛',
   'other': 'その他',
 };
+
+/// Free の閲覧範囲（直近30日）より前にある、保存済みレビューの概要。
+/// 本文は冒頭だけが届く（全文はアップグレードで読めるようになる）。
+class LockedPreview {
+  final int hiddenTotal;
+
+  /// うち★1〜2の件数。
+  final int hiddenLow;
+  final List<LockedReview> samples;
+
+  const LockedPreview({
+    required this.hiddenTotal,
+    required this.hiddenLow,
+    required this.samples,
+  });
+
+  static const empty = LockedPreview(hiddenTotal: 0, hiddenLow: 0, samples: []);
+
+  bool get hasHidden => hiddenTotal > 0;
+
+  factory LockedPreview.fromRows(List rows) {
+    if (rows.isEmpty) return empty;
+    final first = Map<String, dynamic>.from(rows.first as Map);
+    return LockedPreview(
+      hiddenTotal: (first['hidden_total'] as num?)?.toInt() ?? 0,
+      hiddenLow: (first['hidden_low'] as num?)?.toInt() ?? 0,
+      samples: rows
+          .map((e) => LockedReview.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
+  }
+}
+
+class LockedReview {
+  final int rating;
+  final DateTime? reviewedAt;
+  final String appName;
+  final String snippet;
+
+  const LockedReview({
+    required this.rating,
+    required this.reviewedAt,
+    required this.appName,
+    required this.snippet,
+  });
+
+  factory LockedReview.fromJson(Map<String, dynamic> j) => LockedReview(
+        rating: (j['rating'] as num?)?.toInt() ?? 0,
+        reviewedAt: _dt(j['reviewed_at']),
+        appName: (j['app_name'] as String?) ?? '',
+        snippet: (j['snippet'] as String?) ?? '',
+      );
+}
+
+/// 分析タブの集計（DB側で全件を集計した結果）。
+class ReviewSummary {
+  final int total;
+  final double avgRating;
+  final int unreplied;
+
+  /// 星（1〜5）ごとの件数。
+  final Map<int, int> byRating;
+
+  /// トピックごとの件数。
+  final Map<String, int> topics;
+
+  const ReviewSummary({
+    required this.total,
+    required this.avgRating,
+    required this.unreplied,
+    required this.byRating,
+    required this.topics,
+  });
+
+  factory ReviewSummary.fromJson(Map<String, dynamic> j) {
+    Map<String, int> ints(Object? v) => {
+          for (final e in ((v as Map?) ?? const {}).entries)
+            '${e.key}': (e.value as num).toInt(),
+        };
+    return ReviewSummary(
+      total: (j['total'] as num?)?.toInt() ?? 0,
+      avgRating: (j['avg_rating'] as num?)?.toDouble() ?? 0,
+      unreplied: (j['unreplied'] as num?)?.toInt() ?? 0,
+      byRating: ints(j['by_rating'])
+          .map((k, v) => MapEntry(int.tryParse(k) ?? 0, v)),
+      topics: ints(j['topics']),
+    );
+  }
+
+  /// 集計関数が使えない環境向けに、取得済みの一覧から作る（直近200件ぶん）。
+  factory ReviewSummary.fromReviews(List<ReviewRow> reviews) {
+    final byRating = <int, int>{};
+    final topics = <String, int>{};
+    for (final r in reviews) {
+      byRating[r.rating] = (byRating[r.rating] ?? 0) + 1;
+      for (final t in r.topics) {
+        topics[t] = (topics[t] ?? 0) + 1;
+      }
+    }
+    return ReviewSummary(
+      total: reviews.length,
+      avgRating: reviews.isEmpty
+          ? 0
+          : reviews.map((r) => r.rating).reduce((a, b) => a + b) /
+              reviews.length,
+      unreplied: reviews.where((r) => !r.hasReply).length,
+      byRating: byRating,
+      topics: topics,
+    );
+  }
+}

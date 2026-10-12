@@ -18,6 +18,7 @@ const PUBLIC_PATHS = [
   "/privacy",
   "/tokushoho",
   "/pricing",
+  "/help",
   // `/not-found` は下の rewrite 先。Cloudflare Workers では rewrite 先がもう一度
   // middleware を通るため（Vercelは通らない）、ここに入れておかないと
   // 「未ログイン → /login へリダイレクト」に捕まり、/dashboard が 404 ではなく

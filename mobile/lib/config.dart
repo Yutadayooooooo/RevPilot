@@ -30,6 +30,18 @@ class AppConfig {
   static const firebaseAppIdAndroid =
       String.fromEnvironment('FIREBASE_APP_ID_ANDROID');
 
+  // --- Google ログイン ---
+  // Google Cloud の OAuth クライアントID（公開前提の識別子）。
+  //   GOOGLE_WEB_CLIENT_ID : 「ウェブアプリケーション」型。Supabase の Google プロバイダにも同じ値を登録する
+  //   GOOGLE_IOS_CLIENT_ID : 「iOS」型。ios/Runner/Info.plist の URL スキームに逆順の値を入れる
+  // 設定ファイルで空文字を渡すとログイン画面に Google ボタンを出さない（既定値は本番のID）。
+  // OAuth クライアントIDは秘密ではない（アプリに埋め込まれ、誰でも取り出せる）ので既定値を置く。
+  // iOS の ID を変えたら ios/Runner/Info.plist の GIDClientID と URL スキームも合わせること。
+  static const googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID',
+      defaultValue: '853072258337-9ehbgbofma1r3shid18nt6p7gsaq057u.apps.googleusercontent.com');
+  static const googleIosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID',
+      defaultValue: '853072258337-89nupbh95o5fujt334dl7kojercar765.apps.googleusercontent.com');
+
   /// iOSのバンドルID。Firebaseに登録したiOSアプリと一致させる。
   static const iosBundleId = 'jp.revpilot.app';
 

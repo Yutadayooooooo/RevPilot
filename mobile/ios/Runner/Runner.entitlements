@@ -13,5 +13,11 @@
 	-->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Sign in with Apple（ログイン画面の「Appleでサインイン」）。
+	     App ID 側でも Sign In with Apple の Capability を有効にしておくこと。 -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

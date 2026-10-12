@@ -11,6 +11,41 @@ const TONE_JP: Record<Tone, string> = {
   apologetic: "問題を真摯に受け止め謝罪を軸にしたトーン",
 };
 
+/**
+ * アプリごとの返信スタイル（apps.reply_opening / reply_closing / reply_rules）。
+ * 返信ごとに書き出しや署名がばらつくと、ストアのページで並んだときに
+ * 「AIに書かせている」印象が強くなる。決まった部分は利用者が決め、AIは中身だけを書く。
+ */
+export interface ReplyStyle {
+  opening?: string | null;
+  closing?: string | null;
+  rules?: string | null;
+}
+
+/** 返信スタイルの各欄の上限。プロンプトの長さ（＝原価）を有界にする。 */
+const MAX_STYLE_CHARS = 200;
+const MAX_RULES_CHARS = 400;
+
+function styleInstructions(style: ReplyStyle | undefined): string {
+  const opening = clip(style?.opening, MAX_STYLE_CHARS);
+  const closing = clip(style?.closing, MAX_STYLE_CHARS);
+  const rules = clip(style?.rules, MAX_RULES_CHARS);
+  const lines: string[] = [];
+  if (opening) {
+    lines.push(
+      `返信は必ず次の書き出しで始める（レビューが同じ言語なら一字一句そのまま、別の言語なら自然に訳す）: 「${opening}」`
+    );
+  }
+  if (closing) {
+    lines.push(
+      `返信の最後は必ず次の結びで終える（レビューが同じ言語なら一字一句そのまま、別の言語なら自然に訳す）: 「${closing}」`
+    );
+  }
+  if (rules) lines.push(`開発者が決めた返信のルール（必ず守る）: ${rules}`);
+  if (lines.length === 0) return "";
+  return `\n${lines.join("\n")}\n書き出しと結びも350文字に含める。`;
+}
+
 export interface ReviewForAI {
   rating: number;
   title?: string | null;
@@ -36,7 +71,8 @@ export async function draftReply(
   review: ReviewForAI,
   appName: string,
   appDescription: string | null,
-  tone: Tone = "polite"
+  tone: Tone = "polite",
+  style?: ReplyStyle
 ): Promise<string> {
   const msg = await client.messages.create({
     model: MODEL,
@@ -46,7 +82,8 @@ export async function draftReply(
       `アプリ概要: ${appDescription ?? "(なし)"}。` +
       `${TONE_JP[tone]}で、レビューと同じ言語で、350文字以内で返信してください。` +
       `低評価には具体的な次アクション（修正予定/問い合わせ導線）を1つ含め、定型文っぽさを避けます。` +
-      `返信本文のみを出力し、前置きや説明は書かないこと。`,
+      `返信本文のみを出力し、前置きや説明は書かないこと。` +
+      styleInstructions(style),
     messages: [
       {
         role: "user",

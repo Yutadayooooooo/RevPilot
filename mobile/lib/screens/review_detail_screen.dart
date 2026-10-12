@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../data.dart';
+import 'apps_screen.dart';
 import 'plan_screen.dart';
 import '../models.dart';
 import '../theme.dart';
@@ -26,9 +27,27 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
   bool _generating = false;
   bool _posting = false;
 
+  /// 今月のAI返信の残り（読み込み前・取得失敗時は null で何も出さない）。
+  int? _aiLeft;
+  String _plan = 'free';
+
+  Future<void> _loadAiLeft() async {
+    try {
+      final s = await Repo.billingStatus();
+      final left = (planAiReplies(s.plan) - s.aiRepliesUsed).clamp(0, 1 << 30);
+      if (mounted) {
+        setState(() {
+          _plan = s.plan;
+          _aiLeft = left;
+        });
+      }
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadAiLeft();
     final existing =
         widget.review.replies.isNotEmpty ? widget.review.replies.first.body : '';
     _reply = TextEditingController(text: existing);
@@ -65,6 +84,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
         HapticFeedback.mediumImpact();
         setState(() => _reply.text = body);
         showSnack(context, 'AIが返信を生成しました', kind: SnackKind.success);
+        _loadAiLeft();
       }
     } catch (e) {
       if (mounted) {
@@ -72,6 +92,57 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
       }
     } finally {
       if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  /// 「今月のAI返信 あとN件」。Free で残りが少ないときは Pro への導線を添える。
+  /// 上限に当たってから知るより、手前で見えている方が納得してアップグレードできる。
+  Widget _aiLeftLine() {
+    final left = _aiLeft!;
+    final low = left <= 1;
+    final isFree = _plan == 'free';
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            left == 0 ? '今月のAI返信は使い切りました' : '今月のAI返信 あと$left件',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: low ? FontWeight.w700 : FontWeight.w500,
+              color: low ? AppTheme.warning : context.subtleC,
+            ),
+          ),
+          if (isFree && low)
+            TextButton(
+              onPressed: () =>
+                  openPlanScreen(context, reason: PaywallReason.aiQuota),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                minimumSize: const Size(0, 28),
+              ),
+              child: Text('Proなら月${planAiReplies('pro')}件',
+                  style: const TextStyle(fontSize: 11)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// このレビューのアプリの返信スタイル（書き出し・結び・ルール）を編集する。
+  /// AI返信を見たその場で「毎回こう書いてほしい」を直せるようにする。
+  Future<void> _openReplyStyle() async {
+    HapticFeedback.selectionClick();
+    try {
+      final apps = await Repo.apps();
+      final app = apps.where((a) => a.id == widget.review.appId).firstOrNull;
+      if (app == null || !mounted) return;
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => AppEditScreen(existing: app)),
+      );
+    } catch (e) {
+      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
     }
   }
 
@@ -216,6 +287,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                         TextStyle(fontSize: 11, color: Colors.grey.shade500)),
             ],
           ).animate(delay: 120.ms).fadeIn(duration: 240.ms),
+          if (AppConfig.hasApi && _aiLeft != null) _aiLeftLine(),
           const SizedBox(height: 8),
           Stack(
             children: [
@@ -247,7 +319,17 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
             ],
           ).animate(delay: 180.ms).fadeIn(duration: 240.ms).slideY(
               begin: 0.05, end: 0, curve: Curves.easeOut),
-          const SizedBox(height: 12),
+          if (AppConfig.hasApi)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _openReplyStyle,
+                icon: const Icon(Icons.tune_rounded, size: 16),
+                label: const Text('返信スタイルを設定',
+                    style: TextStyle(fontSize: 12)),
+              ),
+            ),
+          const SizedBox(height: 4),
           Row(
             children: [
               Expanded(

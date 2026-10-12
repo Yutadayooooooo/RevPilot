@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../data.dart';
+import '../locked_preview.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -18,22 +19,30 @@ class AnalyticsScreen extends StatefulWidget {
 }
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
-  late Future<List<ReviewRow>> _future;
+  late Future<ReviewSummary> _future;
   List<AppRow> _apps = [];
   String? _appId; // 特定アプリで絞り込み
   String? _store; // 特定ストア全体で絞り込み（appIdとは排他）
+  String _plan = 'free';
+  LockedPreview _locked = LockedPreview.empty;
 
   @override
   void initState() {
     super.initState();
-    _future = Repo.reviews();
+    _future = Repo.reviewSummary();
     Repo.apps().then((a) {
       if (mounted) setState(() => _apps = a);
+    }).catchError((_) {});
+    Repo.plan().then((p) {
+      if (mounted) setState(() => _plan = p);
+      return p == 'free' ? Repo.lockedPreview() : Future.value(LockedPreview.empty);
+    }).then((l) {
+      if (mounted) setState(() => _locked = l);
     }).catchError((_) {});
   }
 
   void _applyScope() {
-    _future = Repo.reviews(appId: _appId, store: _store);
+    _future = Repo.reviewSummary(appId: _appId, store: _store);
   }
 
   Future<void> _refresh() async {
@@ -64,14 +73,23 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           Expanded(
             child: RefreshIndicator(
               onRefresh: _refresh,
-              child: FutureBuilder<List<ReviewRow>>(
+              child: FutureBuilder<ReviewSummary>(
                 future: _future,
                 builder: (context, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const _AnalyticsSkeleton();
                   }
-                  final reviews = snap.data ?? [];
-                  if (reviews.isEmpty) {
+                  final summary = snap.data;
+                  final empty = summary == null || summary.total == 0;
+                  // 閲覧範囲内は空でも、それより前に保存済みのレビューがあるなら
+                  // 「データがない」とは言わずにチラ見せする（件数は全アプリ合計）。
+                  if (empty && _locked.hasHidden) {
+                    return ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [LockedReviewsTeaser(_locked)],
+                    );
+                  }
+                  if (empty) {
                     return ListView(children: const [
                       SizedBox(height: 80),
                       EmptyState(
@@ -87,14 +105,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       .fadeIn(duration: 300.ms);
                   return ListView(
                     // scope切替時にアニメを作り直し、バーの伸びを見せる
-                    key: ValueKey('${_appId ?? _store ?? "all"}-${reviews.length}'),
+                    key: ValueKey('${_appId ?? _store ?? "all"}-${summary.total}'),
                     padding: const EdgeInsets.all(16),
                     children: [
-                      staggered(_summaryRow(reviews)),
+                      staggered(_summaryRow(summary)),
                       const SizedBox(height: 16),
-                      staggered(_ratingDistribution(reviews)),
+                      staggered(_ratingDistribution(summary)),
                       const SizedBox(height: 16),
-                      staggered(_topicBreakdown(reviews)),
+                      staggered(planDef(_plan).limits.topicAnalysis
+                          ? _topicBreakdown(summary)
+                          : const LockedTopicsCard()),
+                      if (_locked.hasHidden) ...[
+                        const SizedBox(height: 16),
+                        staggered(LockedReviewsTeaser(_locked)),
+                      ],
                     ],
                   );
                 },
@@ -218,10 +242,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  Widget _summaryRow(List<ReviewRow> reviews) {
-    final avg = reviews.map((r) => r.rating).reduce((a, b) => a + b) /
-        reviews.length;
-    final unreplied = reviews.where((r) => !r.hasReply).length;
+  Widget _summaryRow(ReviewSummary s) {
+    final avg = s.avgRating;
+    final unreplied = s.unreplied;
     return Row(
       children: [
         Expanded(
@@ -229,7 +252,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 decimals: 2, color: AppTheme.ratingColor(avg.round()))),
         const SizedBox(width: 12),
         Expanded(
-            child: _statCard('レビュー数', reviews.length.toDouble(),
+            child: _statCard('レビュー数', s.total.toDouble(),
                 Icons.rate_review_outlined)),
         const SizedBox(width: 12),
         Expanded(
@@ -266,11 +289,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  Widget _ratingDistribution(List<ReviewRow> reviews) {
-    final counts = <int, int>{for (var i = 1; i <= 5; i++) i: 0};
-    for (final r in reviews) {
-      counts[r.rating] = (counts[r.rating] ?? 0) + 1;
-    }
+  Widget _ratingDistribution(ReviewSummary s) {
+    final counts = <int, int>{
+      for (var i = 1; i <= 5; i++) i: s.byRating[i] ?? 0,
+    };
     final maxCount = counts.values.fold<int>(1, (m, v) => v > m ? v : m);
     return Card(
       child: Padding(
@@ -310,13 +332,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  Widget _topicBreakdown(List<ReviewRow> reviews) {
-    final counts = <String, int>{};
-    for (final r in reviews) {
-      for (final t in r.topics) {
-        counts[t] = (counts[t] ?? 0) + 1;
-      }
-    }
+  Widget _topicBreakdown(ReviewSummary s) {
+    final counts = s.topics;
     if (counts.isEmpty) {
       return Card(
         child: Padding(

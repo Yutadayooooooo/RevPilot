@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordTrial } from "@/lib/trial-status";
 import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { serviceClient } from "@/lib/supabase";
 import {
@@ -92,6 +93,7 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  await recordTrial(db, user.id, state.inTrial);
 
   return NextResponse.json({
     ok: true,

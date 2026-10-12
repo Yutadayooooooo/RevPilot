@@ -4,7 +4,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
 import '../data.dart';
+import '../locked_preview.dart';
 import '../models.dart';
+import '../setup_guide.dart';
 import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
@@ -32,6 +34,13 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   String _plan = 'free';
   bool _bulkRunning = false;
 
+  /// 連携済みストア・アプリ一覧を一度でも読み終えたか（読む前に道案内を出さない）。
+  bool _metaLoaded = false;
+  List<String> _connected = [];
+
+  /// Free の閲覧範囲より前にある保存済みレビュー（チラ見せ用）。
+  LockedPreview _locked = LockedPreview.empty;
+
   int get _activeCount =>
       _ratings.length + (_unrepliedOnly ? 1 : 0) + (_appId != null ? 1 : 0);
 
@@ -55,15 +64,30 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   }
 
   void _fetchMeta() {
-    Repo.apps().then((a) {
-      if (mounted) setState(() => _apps = a);
-    }).catchError((_) {});
+    Future.wait([
+      Repo.apps().then((a) => _apps = a),
+      Repo.connectedStores().then((c) => _connected = c),
+    ]).then((_) {
+      if (mounted) setState(() => _metaLoaded = true);
+    }).catchError((_) {
+      if (mounted) setState(() => _metaLoaded = true);
+    });
     Repo.announcements().then((a) {
       if (mounted) setState(() => _announcements = a);
     }).catchError((_) {});
     Repo.plan().then((p) {
       if (mounted) setState(() => _plan = p);
+      // 有料プランには隠れたレビューがないので問い合わせない。
+      return p == 'free' ? Repo.lockedPreview() : Future.value(LockedPreview.empty);
+    }).then((l) {
+      if (mounted) setState(() => _locked = l);
     }).catchError((_) {});
+  }
+
+  /// 道案内の手順を進めたあと：連携状態と一覧を取り直す。
+  void _afterSetupStep() {
+    _fetchMeta();
+    if (mounted) setState(_reloadReviews);
   }
 
   Future<void> _refresh() async {
@@ -128,33 +152,25 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                   }
                   final reviews = snap.data ?? [];
                   if (reviews.isEmpty) {
-                    return ListView(children: [
-                      const SizedBox(height: 80),
-                      EmptyState(
-                        icon: Icons.inbox_outlined,
-                        title: 'レビューがありません',
-                        subtitle: _activeCount > 0
-                            ? '絞り込み条件に一致するレビューがありません。'
-                            : 'アプリを連携し、ストアから取得すると表示されます。',
-                        action: _activeCount > 0
-                            ? TextButton(
-                                onPressed: _clearAll,
-                                child: const Text('絞り込みを解除'))
-                            : null,
-                      ),
-                    ]);
+                    return ListView(
+                      padding: _activeCount == 0 && _locked.hasHidden
+                          ? const EdgeInsets.all(16)
+                          : EdgeInsets.zero,
+                      children: [_emptyBody()],
+                    );
                   }
-                  // Freeは履歴の閲覧範囲が限られるため、末尾にその旨とアップセルを出す。
-                  // 「古いレビューが消えた」と誤解されないよう、保存はされていることを明記する。
-                  final historyDays = planHistoryDays(_plan);
-                  final showHistoryNote = historyDays != null;
+                  // Freeで閲覧範囲より前にもレビューがあるときは、末尾でチラ見せする。
+                  final showLocked = _locked.hasHidden;
                   return ListView.separated(
                     padding: const EdgeInsets.all(16),
-                    itemCount: reviews.length + (showHistoryNote ? 1 : 0),
+                    itemCount: reviews.length + (showLocked ? 1 : 0),
                     separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (_, i) {
                       if (i == reviews.length) {
-                        return _historyNote(historyDays!);
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: LockedReviewsTeaser(_locked),
+                        );
                       }
                       final delay = (i < 12 ? i * 45 : 0).ms;
                       return _ReviewCard(
@@ -181,45 +197,58 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
     );
   }
 
-  /// 履歴の閲覧範囲の案内（Freeのみ）。
-  ///
-  /// レビュー自体は削除しておらず、課金すれば即座に全期間が見える。
-  /// 「消えた」と誤解されると問い合わせと不信につながるので、そこを明記する。
-  Widget _historyNote(int days) {
-    return Container(
-      margin: const EdgeInsets.only(top: 6),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.primary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.history, size: 18, color: AppTheme.primary),
-              const SizedBox(width: 8),
-              Text('表示は直近$days日ぶんです',
-                  style: const TextStyle(fontWeight: FontWeight.w700)),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'それ以前のレビューも削除せず保存しています。'
-            'Proにアップグレードすると、すぐに全期間を閲覧できます。',
-            style: TextStyle(fontSize: 12, height: 1.5, color: context.subtleC),
-          ),
-          const SizedBox(height: 10),
-          FilledButton.tonal(
-            onPressed: () =>
-                openPlanScreen(context, reason: PaywallReason.history),
-            child: const Text('全期間を見る方法'),
-          ),
-        ],
+  /// 一覧が空のときの中身。「データがない」で終わらせず、次にすることを出す。
+  ///   1. 絞り込み中 → 条件の解除
+  ///   2. Free で30日より前にだけレビューがある → ぼかしたチラ見せ（保存はされている）
+  ///   3. 連携かアプリ追加がまだ → はじめの3ステップ
+  ///   4. 準備は済んでいるがまだ届いていない → 今すぐ取得
+  Widget _emptyBody() {
+    if (_activeCount > 0) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 80),
+        child: EmptyState(
+          icon: Icons.inbox_outlined,
+          title: 'レビューがありません',
+          subtitle: '絞り込み条件に一致するレビューがありません。',
+          action: TextButton(
+              onPressed: _clearAll, child: const Text('絞り込みを解除')),
+        ),
+      );
+    }
+    if (_locked.hasHidden) return LockedReviewsTeaser(_locked);
+    if (!_metaLoaded) return const SizedBox.shrink();
+    if (_connected.isEmpty || _apps.isEmpty) {
+      return SetupGuide(
+        storeConnected: _connected.isNotEmpty,
+        hasApp: _apps.isNotEmpty,
+        onChanged: _afterSetupStep,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 80),
+      child: EmptyState(
+        icon: Icons.hourglass_empty_rounded,
+        title: 'まだレビューが届いていません',
+        subtitle: '新着は毎時自動で取り込みます。\n'
+            'Google Play は直近7日ぶんのレビューから取り込まれます。',
+        action: FilledButton.tonal(
+          onPressed: Repo.canRefresh ? _fetchNow : null,
+          child: const Text('今すぐ取得'),
+        ),
       ),
     );
+  }
+
+  Future<void> _fetchNow() async {
+    HapticFeedback.lightImpact();
+    try {
+      await Repo.refreshFromStores();
+      if (!mounted) return;
+      showSnack(context, 'ストアから最新レビューを取得しました', kind: SnackKind.success);
+      setState(_reloadReviews);
+    } catch (e) {
+      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
+    }
   }
 
   // ---- お知らせバナー ----

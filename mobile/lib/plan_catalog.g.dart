@@ -86,7 +86,7 @@ const List<PlanDef> planCatalog = [
     key: 'pro',
     name: 'Pro',
     tagline: '個人開発者の標準',
-    features: ['アプリ数 無制限', 'レビュー履歴 無期限', 'AI返信 月300件', '一括返信 最大20件', 'トピック分析', '週次サマリー'],
+    features: ['レビュー履歴 無期限（全期間を保存・閲覧）', 'アプリ数 無制限', 'AI返信 月300件', '一括返信 最大20件', 'トピック分析', '週次サマリー'],
     popular: true,
     hidden: false,
     trialLabel: '1か月',

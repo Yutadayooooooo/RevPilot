@@ -5,10 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
+import 'notification_primer.dart';
 import 'push.dart';
 import 'theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/intro_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,14 +40,22 @@ Future<void> _setUpPush() async {
   await PushService.init();
   if (!PushService.configured) return;
 
+  // 許可を求めるのは、ホーム画面で通知の説明（NotificationPrimer）を見せたあと。
+  // 説明を済ませた人だけ、起動時・サインイン時に端末を登録し直す。
   final auth = Supabase.instance.client.auth;
+  Future<void> registerIfPrimed() async {
+    if (await NotificationPrimer.done()) {
+      await PushService.registerForCurrentUser();
+    }
+  }
+
   if (auth.currentSession != null) {
-    // 起動をブロックしない（通知の許可ダイアログを待って白画面にしない）。
-    unawaited(PushService.registerForCurrentUser());
+    // 起動をブロックしない。
+    unawaited(registerIfPrimed());
   }
   auth.onAuthStateChange.listen((state) {
     if (state.event == AuthChangeEvent.signedIn) {
-      unawaited(PushService.registerForCurrentUser());
+      unawaited(registerIfPrimed());
     }
   });
 }
@@ -67,8 +77,24 @@ class RevPilotApp extends StatelessWidget {
 }
 
 /// ログイン状態を監視し、未ログインならログイン画面、ログイン済みならホームへ。
-class AuthGate extends StatelessWidget {
+/// 初回起動（未ログインかつ紹介を見ていない）ときだけ、ログインの前に紹介を挟む。
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool? _introSeen;
+
+  @override
+  void initState() {
+    super.initState();
+    IntroScreen.seen().then((v) {
+      if (mounted) setState(() => _introSeen = v);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +102,20 @@ class AuthGate extends StatelessWidget {
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
         final session = Supabase.instance.client.auth.currentSession;
+        final Widget child;
+        if (session != null) {
+          child = const HomeScreen(key: ValueKey('home'));
+        } else if (_introSeen == null) {
+          // 端末設定の読み込み待ち（一瞬）。ログイン画面を一度出してから紹介に変わるのを避ける。
+          child = const SizedBox.shrink(key: ValueKey('wait'));
+        } else if (_introSeen == false) {
+          child = IntroScreen(
+            key: const ValueKey('intro'),
+            onDone: () => setState(() => _introSeen = true),
+          );
+        } else {
+          child = const LoginScreen(key: ValueKey('login'));
+        }
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 350),
           switchInCurve: Curves.easeOut,
@@ -83,9 +123,7 @@ class AuthGate extends StatelessWidget {
             opacity: anim,
             child: child,
           ),
-          child: session == null
-              ? const LoginScreen(key: ValueKey('login'))
-              : const HomeScreen(key: ValueKey('home')),
+          child: child,
         );
       },
     );

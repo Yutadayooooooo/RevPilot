@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
   const { data: reviews } = await db
     .from("reviews")
     .select(
-      "id, store, external_id, rating, title, body, territory, apps!inner(name, description, store_app_id, reply_tone)"
+      "id, store, external_id, rating, title, body, territory, apps!inner(*)"
     )
     .in("id", ids);
 
@@ -144,7 +144,8 @@ export async function POST(req: NextRequest) {
           { rating: review.rating, title: review.title, body: review.body, territory: review.territory },
           app.name,
           app.description,
-          app.reply_tone
+          app.reply_tone,
+          { opening: app.reply_opening, closing: app.reply_closing, rules: app.reply_rules }
         );
         generated++;
       } catch (e: any) {

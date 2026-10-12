@@ -74,6 +74,9 @@ class Repo {
     required String name,
     String? description,
     String tone = 'polite',
+    String? replyOpening,
+    String? replyClosing,
+    String? replyRules,
   }) async {
     // アプリ追加はAPI経由にする。
     // 追加の時点でストア側のアクセス権（App IDの誤り・権限不足）を確認できるため、
@@ -87,22 +90,30 @@ class Repo {
         'name': name,
         'description': description,
         'reply_tone': tone,
+        'reply_opening': replyOpening,
+        'reply_closing': replyClosing,
+        'reply_rules': replyRules,
       },
       timeout: const Duration(seconds: 45), // ストアへの疎通確認を含む
     );
     return AppRow.fromJson(Map<String, dynamic>.from(json['app'] as Map));
   }
 
+  /// アプリの編集。[style] は変更した欄だけを渡す（null の値は「空にする」）。
+  /// 触っていない列を送らないのは、返信スタイルの列が未適用のDBでも
+  /// 名前やトーンの編集が失敗しないようにするため。
   static Future<void> updateApp(
     String id, {
     required String name,
     String? description,
     required String tone,
+    Map<String, String?> style = const {},
   }) async {
     await _db.from('apps').update({
       'name': name,
       'description': description,
       'reply_tone': tone,
+      ...style,
     }).eq('id', id);
   }
 
@@ -148,6 +159,20 @@ class Repo {
     return listOut;
   }
 
+  /// 分析タブの集計。DB 側で全件を集計する（端末で200件だけ平均すると数字がずれるため）。
+  /// 集計関数が未作成のDBでは、従来どおり一覧から計算する。
+  static Future<ReviewSummary> reviewSummary({String? appId, String? store}) async {
+    try {
+      final rows = await _db.rpc('my_review_summary',
+          params: {'p_app': appId, 'p_store': store});
+      final list = rows as List;
+      if (list.isNotEmpty) {
+        return ReviewSummary.fromJson(Map<String, dynamic>.from(list.first as Map));
+      }
+    } catch (_) {}
+    return ReviewSummary.fromReviews(await reviews(appId: appId, store: store));
+  }
+
   /// 通知の判定・バナー表示に使う軽量なレビュー取得。
   ///
   /// 通知チェックは定期的に走るため、一覧用の重いクエリ
@@ -184,6 +209,18 @@ class Repo {
           .toList();
     } catch (_) {
       return [];
+    }
+  }
+
+  /// Free の閲覧範囲より前にある、保存済みレビューの件数と抜粋。
+  /// 関数が未作成（スキーマ未適用）でも画面を落とさないよう、失敗時は空を返す。
+  static Future<LockedPreview> lockedPreview({int limit = 3}) async {
+    try {
+      final rows = await _db
+          .rpc('locked_reviews_preview', params: {'p_limit': limit});
+      return LockedPreview.fromRows(rows as List);
+    } catch (_) {
+      return LockedPreview.empty;
     }
   }
 
@@ -435,9 +472,20 @@ class Repo {
           .maybeSingle()
           .catchError((_) => null),
     ]);
+    // トライアルの列は後から足したので、無いDBでも課金画面を落とさないよう別に読む。
+    Map<String, dynamic>? trial;
+    try {
+      trial = await _db
+          .from('profiles')
+          .select('in_trial, current_period_end')
+          .eq('id', uid)
+          .maybeSingle();
+    } catch (_) {}
     return BillingStatus(
       plan: (results[0]?['plan'] as String?) ?? 'free',
       aiUnitsUsed: (results[1]?['units'] as num?)?.toInt() ?? 0,
+      inTrial: trial?['in_trial'] == true,
+      periodEnd: DateTime.tryParse((trial?['current_period_end'] as String?) ?? ''),
     );
   }
 }
@@ -493,7 +541,24 @@ class BillingStatus {
   /// 今月使ったAIの units（ai_usage）。
   final int aiUnitsUsed;
 
-  const BillingStatus({required this.plan, required this.aiUnitsUsed});
+  /// 無料トライアル中か。中なら [periodEnd] が無料期間の終わり（＝初回請求日）。
+  final bool inTrial;
+  final DateTime? periodEnd;
+
+  const BillingStatus({
+    required this.plan,
+    required this.aiUnitsUsed,
+    this.inTrial = false,
+    this.periodEnd,
+  });
+
+  /// 「Pro 無料トライアル中・10月12日まで」のような一文。トライアル中でなければ null。
+  String? get trialLine {
+    if (!inTrial || plan == 'free') return null;
+    final end = periodEnd?.toLocal();
+    final until = end == null ? '' : '・${end.month}月${end.day}日まで';
+    return '${planLabel(plan)} 無料トライアル中$until';
+  }
 
   int get aiRepliesUsed => aiUnitsUsed ~/ aiUnitsPerReply;
 }

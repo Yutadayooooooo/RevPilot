@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
+import '../social_auth.dart';
 import '../data.dart';
 import '../models.dart';
 import '../notifications.dart';
@@ -72,10 +73,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<_SettingsData> _load() async {
-    final plan = await Repo.plan();
+    final billing = await Repo.billingStatus();
     final apps = await Repo.apps();
     final connected = await Repo.connectedStores();
-    return _SettingsData(plan: plan, apps: apps, connected: connected);
+    return _SettingsData(
+        plan: billing.plan,
+        apps: apps,
+        connected: connected,
+        trialLine: billing.trialLine);
   }
 
   void _reload() => setState(() => _future = _load());
@@ -157,6 +162,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // 後だと認証が切れていて自分の端末を外せず、
       // 同じ端末を使う次の利用者にこのアカウント宛の通知が届き続ける。
       await PushService.unregister();
+      await SocialAuth.signOutProviders();
       await Supabase.instance.client.auth.signOut();
     }
   }
@@ -195,6 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await Repo.deleteAccount();
       HapticFeedback.heavyImpact();
       // 削除済みユーザーはサーバーサインアウトが失敗し得るためローカルで確実にセッション破棄。
+      await SocialAuth.signOutProviders();
       await Supabase.instance.client.auth.signOut(scope: SignOutScope.local);
       // 以降は認証状態の変化でログイン画面へ遷移する。
     } catch (e) {
@@ -244,6 +251,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ],
                     ),
+                    if (data?.trialLine != null) ...[
+                      const SizedBox(height: 4),
+                      Text(data!.trialLine!,
+                          style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.success)),
+                    ],
                   ],
                 ),
               ),
@@ -496,6 +511,10 @@ class _SettingsData {
   final String plan;
   final List<AppRow> apps;
   final List<String> connected;
+  final String? trialLine;
   _SettingsData(
-      {required this.plan, required this.apps, required this.connected});
+      {required this.plan,
+      required this.apps,
+      required this.connected,
+      this.trialLine});
 }

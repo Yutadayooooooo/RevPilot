@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const { user, db } = auth;
 
   const body = await req.json();
-  const { store, store_app_id, name, description, reply_tone } = body ?? {};
+  const { store, store_app_id, name, description, reply_tone, reply_opening, reply_closing, reply_rules } = body ?? {};
   if (!store || !store_app_id || !name) {
     return NextResponse.json({ error: "store, store_app_id, name は必須です" }, { status: 400 });
   }
@@ -77,6 +77,10 @@ export async function POST(req: NextRequest) {
       name,
       description: description ?? null,
       reply_tone: reply_tone ?? "polite",
+      // 返信スタイルは任意。未指定なら列に触れない（スキーマ未適用のDBでも追加できるように）。
+      ...(reply_opening ? { reply_opening } : {}),
+      ...(reply_closing ? { reply_closing } : {}),
+      ...(reply_rules ? { reply_rules } : {}),
     })
     .select()
     .single();

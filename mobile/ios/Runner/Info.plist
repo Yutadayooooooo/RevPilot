@@ -84,5 +84,19 @@
 			<key>NSAllowsLocalNetworking</key>
 			<true/>
 		</dict>
+		<!-- Google ログイン（google_sign_in）。iOS の OAuth クライアントIDと、その逆順の URL スキーム。 -->
+		<key>GIDClientID</key>
+		<string>853072258337-89nupbh95o5fujt334dl7kojercar765.apps.googleusercontent.com</string>
+		<key>CFBundleURLTypes</key>
+		<array>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>com.googleusercontent.apps.853072258337-89nupbh95o5fujt334dl7kojercar765</string>
+				</array>
+			</dict>
+		</array>
 	</dict>
 </plist>

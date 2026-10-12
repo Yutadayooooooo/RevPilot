@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { serviceClient } from "@/lib/supabase";
 import { getStripe } from "@/lib/stripe";
+import { decrypt } from "@/lib/crypto";
+import { revokeRefreshToken, siwaConfigured } from "@/lib/apple-siwa";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -43,6 +45,22 @@ export async function DELETE(req: NextRequest) {
   } catch (err) {
     // 解約失敗はログに留め、アカウント削除自体は進める。
     console.error("[account:delete] stripe cancel failed", err);
+  }
+
+  // Sign in with Apple で登録した人は、Apple 側のトークンも取り消す（App Store の要件）。
+  // 失敗しても削除は続行する（Apple 側は利用者が設定アプリからも解除できる）。
+  try {
+    if (siwaConfigured()) {
+      const { data: p } = await serviceClient()
+        .from("profiles")
+        .select("apple_siwa_refresh_token")
+        .eq("id", user.id)
+        .maybeSingle();
+      const enc = p?.apple_siwa_refresh_token as string | null | undefined;
+      if (enc) await revokeRefreshToken(decrypt(enc));
+    }
+  } catch (err) {
+    console.error("[account:delete] siwa revoke failed", err);
   }
 
   // service_role で auth ユーザーを削除（= 関連データはcascadeで消える）。

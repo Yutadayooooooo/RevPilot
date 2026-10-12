@@ -18,7 +18,9 @@ export default function PrivacyPage() {
       <H2>1. 取得する情報</H2>
       <UL>
         <li>
-          <strong>アカウント情報</strong>：メールアドレス、認証に必要な情報。
+          <strong>アカウント情報</strong>：メールアドレス、認証に必要な情報。Apple または Google で
+          ログインした場合は、各社から受け取るメールアドレス（Apple の「メールを非公開」を選んだ場合は中継用アドレス）・
+          氏名（Google のみ）・アカウント識別子、および退会時に Apple との連携を取り消すためのトークン（暗号化して保管）。
         </li>
         <li>
           <strong>レビューデータ</strong>：利用者が連携したアプリのストアレビュー本文・評価・投稿者名・
@@ -76,6 +78,10 @@ export default function PrivacyPage() {
           アプリ内課金（購入の有効性を確認するため、購入識別子を各社のAPIに送信します）。
         </li>
         <li>
+          <strong>Sign in with Apple / Google ログイン</strong>：利用者が選んだ場合に限り、本人確認のため
+          各社が発行する認証情報を受け取り、退会時には Apple に連携の取り消しを送信します。
+        </li>
+        <li>
           <strong>メール送信サービス（Resend）</strong>：通知メール・週次サマリーの配信のため。
         </li>
         <li>
@@ -110,6 +116,12 @@ export default function PrivacyPage() {
         または退会のご依頼があった場合、法令上の保存義務がある情報を除き、関連データ（連携アプリ・レビュー・返信・
         ストア資格情報等）を速やかに削除します。
       </P>
+      <P>
+        削除の手順：RevPilot アプリにログインし「設定 → アカウントを削除」を選んで確認すると、アカウントと上記の
+        関連データがすぐに削除されます（Apple でログインしていた場合は Apple との連携も取り消します）。アプリを
+        利用できない場合は、下記の問い合わせ先へ登録メールアドレスから削除をご依頼ください。サブスクリプションの
+        解約は各ストアで行ってください（アカウントを削除しても自動では解約されません）。
+      </P>
 
       <H2>7. 利用者の権利</H2>
       <P>
@@ -128,7 +140,7 @@ export default function PrivacyPage() {
         <li>連絡先：{BUSINESS.email}</li>
       </UL>
 
-      <LegalFooter updated="2026年9月7日" />
+      <LegalFooter updated="2026年10月12日" />
     </>
   );
 }
