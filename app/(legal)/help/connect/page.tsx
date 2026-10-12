@@ -89,7 +89,7 @@ export default function ConnectHelpPage() {
         {b("過去のレビューも取り込めますか？")} App Store は過去分も取得できます。Google Play の API は直近7日ぶんしか返さないため、
         連携した時点から蓄積していきます。
       </P>
-      <LegalFooter updated="2026-10-12" />
+      <LegalFooter updated="2026年10月12日" />
     </>
   );
 }
