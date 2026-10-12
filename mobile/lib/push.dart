@@ -98,6 +98,7 @@ class PushService {
     if (!_initialized) await init();
     if (!_initialized) return;
 
+    lastError = null;
     try {
       final settings = await FirebaseMessaging.instance.requestPermission();
       if (settings.authorizationStatus == AuthorizationStatus.denied) {
@@ -107,7 +108,10 @@ class PushService {
 
       final token = await _obtainToken();
       if (token == null) {
-        lastError = 'トークンを取得できませんでした';
+        lastError = Platform.isIOS &&
+                await FirebaseMessaging.instance.getAPNSToken() == null
+            ? 'APNsトークンを取得できませんでした'
+            : 'トークンを取得できませんでした';
         return;
       }
       _currentToken = token;
