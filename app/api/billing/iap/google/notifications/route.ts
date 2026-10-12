@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { recordTrial } from "@/lib/trial-status";
 import { serviceClient } from "@/lib/supabase";
 import {
   getGoogleSubscriptionState,
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
         current_period_end: state.expiresAt?.toISOString() ?? null,
       })
       .eq("id", profile.id);
+    await recordTrial(db, profile.id, state.inTrial);
   } catch (e: any) {
     console.error("[iap-google] failed to refresh subscription state", e);
     // 500 を返すと Pub/Sub が再送してくれる

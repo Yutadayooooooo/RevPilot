@@ -223,6 +223,8 @@ export interface AppleSubscriptionState {
   plan: PlanKey | null;
   expiresAt: Date | null;
   productId: string | null;
+  /** 無料トライアル期間中か（プラン画面に「◯日まで無料」を出すのに使う）。 */
+  inTrial: boolean;
 }
 
 /**
@@ -249,7 +251,7 @@ export async function getAppleSubscriptionState(
       }
     }
   }
-  if (!best) return { active: false, plan: null, expiresAt: null, productId: null };
+  if (!best) return { active: false, plan: null, expiresAt: null, productId: null, inTrial: false };
 
   // status: 1=Active, 2=Expired, 3=Billing Retry, 4=Grace Period, 5=Revoked
   const active = best.status === 1 || best.status === 4;
@@ -258,5 +260,6 @@ export async function getAppleSubscriptionState(
     plan: planForAppleProduct(best.tx.productId),
     expiresAt: best.tx.expiresDate ? new Date(best.tx.expiresDate) : null,
     productId: best.tx.productId ?? null,
+    inTrial: active && isFreeTrial(best.tx),
   };
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../local_notifications.dart';
+import '../notification_primer.dart';
 import '../notifications.dart';
 import 'reviews_screen.dart';
 import 'notifications_screen.dart';
@@ -50,7 +51,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    LocalNotifier.init(); // 通知許可のリクエスト（初回のみダイアログ）
+    LocalNotifier.init(); // 許可はここでは求めない（下の説明のあとで求める）
+    // 最初の画面が出てから、何が届くのかを説明したうえで通知の許可を求める。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) NotificationPrimer.maybeShow(context);
+    });
     _refreshUnread();
     _startPolling();
   }

@@ -1,3 +1,4 @@
+import { recordTrial } from "@/lib/trial-status";
 import { serviceClient } from "./supabase";
 import { appleIapConfigured, getAppleSubscriptionState } from "./iap-apple";
 import { getGoogleSubscriptionState, googleIapConfigured } from "./iap-google";
@@ -57,6 +58,7 @@ async function refreshOne(p: {
         current_period_end: state.expiresAt?.toISOString() ?? null,
       })
       .eq("id", p.id);
+    await recordTrial(db, p.id, state.inTrial);
     return state.active ? "active" : "downgraded";
   }
 
@@ -71,10 +73,12 @@ async function refreshOne(p: {
         current_period_end: state.expiresAt?.toISOString() ?? null,
       })
       .eq("id", p.id);
+    await recordTrial(db, p.id, state.inTrial);
     return state.active ? "active" : "downgraded";
   }
 
   // 検証設定が無い環境（開発時の dev-trust など）は、期限で素直に落とす。
   await db.from("profiles").update({ plan: "free", plan_status: "iap_expired" }).eq("id", p.id);
+  await recordTrial(db, p.id, false);
   return "downgraded";
 }

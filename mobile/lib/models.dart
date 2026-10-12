@@ -239,3 +239,61 @@ class LockedReview {
         snippet: (j['snippet'] as String?) ?? '',
       );
 }
+
+/// 分析タブの集計（DB側で全件を集計した結果）。
+class ReviewSummary {
+  final int total;
+  final double avgRating;
+  final int unreplied;
+
+  /// 星（1〜5）ごとの件数。
+  final Map<int, int> byRating;
+
+  /// トピックごとの件数。
+  final Map<String, int> topics;
+
+  const ReviewSummary({
+    required this.total,
+    required this.avgRating,
+    required this.unreplied,
+    required this.byRating,
+    required this.topics,
+  });
+
+  factory ReviewSummary.fromJson(Map<String, dynamic> j) {
+    Map<String, int> ints(Object? v) => {
+          for (final e in ((v as Map?) ?? const {}).entries)
+            '${e.key}': (e.value as num).toInt(),
+        };
+    return ReviewSummary(
+      total: (j['total'] as num?)?.toInt() ?? 0,
+      avgRating: (j['avg_rating'] as num?)?.toDouble() ?? 0,
+      unreplied: (j['unreplied'] as num?)?.toInt() ?? 0,
+      byRating: ints(j['by_rating'])
+          .map((k, v) => MapEntry(int.tryParse(k) ?? 0, v)),
+      topics: ints(j['topics']),
+    );
+  }
+
+  /// 集計関数が使えない環境向けに、取得済みの一覧から作る（直近200件ぶん）。
+  factory ReviewSummary.fromReviews(List<ReviewRow> reviews) {
+    final byRating = <int, int>{};
+    final topics = <String, int>{};
+    for (final r in reviews) {
+      byRating[r.rating] = (byRating[r.rating] ?? 0) + 1;
+      for (final t in r.topics) {
+        topics[t] = (topics[t] ?? 0) + 1;
+      }
+    }
+    return ReviewSummary(
+      total: reviews.length,
+      avgRating: reviews.isEmpty
+          ? 0
+          : reviews.map((r) => r.rating).reduce((a, b) => a + b) /
+              reviews.length,
+      unreplied: reviews.where((r) => !r.hasReply).length,
+      byRating: byRating,
+      topics: topics,
+    );
+  }
+}

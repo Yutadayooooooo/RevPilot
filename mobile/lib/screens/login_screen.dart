@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
+import '../social_auth.dart';
 import '../theme.dart';
 
 /// メール＋パスワードでのログイン／新規登録。
@@ -95,6 +96,75 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _social(Future<void> Function() signIn) async {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _loading = true;
+      _error = null;
+      _info = null;
+    });
+    try {
+      await signIn();
+    } catch (e) {
+      final msg = SocialAuth.messageFor(e);
+      if (mounted && msg != null) setState(() => _error = msg);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Apple / Google のボタン。使えるものがなければ何も出さない。
+  List<Widget> _socialButtons() {
+    final apple = SocialAuth.appleAvailable;
+    final google = SocialAuth.googleAvailable;
+    if (!apple && !google) return const [];
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return [
+      if (apple)
+        // Apple のガイドラインに沿った見た目（黒地／ダーク時は白地に Apple ロゴ）。
+        FilledButton.icon(
+          onPressed: _loading ? null : () => _social(SocialAuth.signInWithApple),
+          style: FilledButton.styleFrom(
+            backgroundColor: dark ? Colors.white : Colors.black,
+            foregroundColor: dark ? Colors.black : Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+          icon: const Icon(Icons.apple, size: 22),
+          label: const Text('Appleでサインイン',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+        ),
+      if (apple && google) const SizedBox(height: 10),
+      if (google)
+        OutlinedButton.icon(
+          onPressed:
+              _loading ? null : () => _social(SocialAuth.signInWithGoogle),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+          ),
+          icon: const Text('G',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF4285F4))),
+          label: const Text('Googleでログイン',
+              style: TextStyle(fontWeight: FontWeight.w600)),
+        ),
+      const SizedBox(height: 18),
+      Row(
+        children: [
+          const Expanded(child: Divider()),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Text('またはメールで',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          ),
+          const Expanded(child: Divider()),
+        ],
+      ),
+      const SizedBox(height: 14),
+    ];
+  }
+
   Future<void> _openLegal(String path) async {
     if (!AppConfig.hasWeb) return;
     final uri = Uri.parse('${AppConfig.webUrl}$path');
@@ -136,6 +206,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.grey)),
                   const SizedBox(height: 32),
+                  ..._socialButtons(),
                   TextField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,

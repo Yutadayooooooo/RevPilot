@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../data.dart';
@@ -97,6 +101,72 @@ class _ConnectStoreScreenState extends State<ConnectStoreScreen> {
     }
   }
 
+  /// 鍵ファイル（.p8 / .json）を選んで中身を欄に入れる。
+  /// スマホで長い鍵をコピー＆ペーストするのは失敗しやすいので、ファイルのまま読めるようにする。
+  /// .p8 のファイル名（AuthKey_XXXXXXXXXX.p8）にはキーIDが含まれるので、それも埋める。
+  Future<void> _pickKeyFile({required bool apple}) async {
+    HapticFeedback.selectionClick();
+    try {
+      final files = await FilePicker.pickFiles();
+      final file = files.firstOrNull;
+      if (file == null) return;
+      final text =
+          utf8.decode(await file.readAsBytes(), allowMalformed: true).trim();
+      setState(() {
+        if (apple) {
+          _privateKey.text = text;
+          final m = RegExp(r'AuthKey_([A-Z0-9]{10})').firstMatch(file.name);
+          if (m != null && _keyId.text.trim().isEmpty) _keyId.text = m.group(1)!;
+        } else {
+          _saJson.text = text;
+        }
+      });
+      if (mounted) {
+        showSnack(context, '${file.name} を読み込みました', kind: SnackKind.success);
+      }
+    } catch (e) {
+      if (mounted) showSnack(context, 'ファイルを読み込めませんでした', kind: SnackKind.error);
+    }
+  }
+
+  Future<void> _open(String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.inAppBrowserView)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  /// 「詳しい手順」と各コンソールを開くリンクの行。
+  Widget _helpRow({required String consoleLabel, required String consoleUrl}) {
+    return Wrap(
+      spacing: 4,
+      children: [
+        if (AppConfig.hasWeb)
+          TextButton.icon(
+            onPressed: () => _open('${AppConfig.webUrl}/help/connect'),
+            icon: const Icon(Icons.menu_book_outlined, size: 16),
+            label: const Text('詳しい手順', style: TextStyle(fontSize: 12)),
+          ),
+        TextButton.icon(
+          onPressed: () => _open(consoleUrl),
+          icon: const Icon(Icons.open_in_new, size: 16),
+          label: Text(consoleLabel, style: const TextStyle(fontSize: 12)),
+        ),
+      ],
+    );
+  }
+
+  Widget _fileButton({required bool apple}) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: OutlinedButton.icon(
+        onPressed: () => _pickKeyFile(apple: apple),
+        icon: const Icon(Icons.upload_file_rounded, size: 18),
+        label: Text(apple ? '.p8 ファイルから読み込む' : 'JSON ファイルから読み込む'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -133,7 +203,12 @@ class _ConnectStoreScreenState extends State<ConnectStoreScreen> {
                         '生成直後に .p8 ファイルをダウンロード（再取得不可）',
                         'Issuer ID とキーIDを下欄にコピー',
                       ]),
-                      const SizedBox(height: 12),
+                      _helpRow(
+                        consoleLabel: 'App Store Connect を開く',
+                        consoleUrl:
+                            'https://appstoreconnect.apple.com/access/integrations/api',
+                      ),
+                      const SizedBox(height: 4),
                       TextField(
                         controller: _issuerId,
                         decoration:
@@ -144,6 +219,8 @@ class _ConnectStoreScreenState extends State<ConnectStoreScreen> {
                         controller: _keyId,
                         decoration: const InputDecoration(labelText: 'Key ID'),
                       ),
+                      const SizedBox(height: 10),
+                      _fileButton(apple: true),
                       const SizedBox(height: 10),
                       TextField(
                         controller: _privateKey,
@@ -179,7 +256,14 @@ class _ConnectStoreScreenState extends State<ConnectStoreScreen> {
                         '対象アプリへのアクセスと「レビューの表示・返信」権限を付与',
                         'JSONの中身を丸ごと下欄に貼り付け',
                       ]),
-                      const SizedBox(height: 12),
+                      _helpRow(
+                        consoleLabel: 'Play Console を開く',
+                        consoleUrl:
+                            'https://play.google.com/console/users-and-permissions',
+                      ),
+                      const SizedBox(height: 4),
+                      _fileButton(apple: false),
+                      const SizedBox(height: 10),
                       TextField(
                         controller: _saJson,
                         maxLines: 6,

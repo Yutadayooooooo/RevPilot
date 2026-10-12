@@ -80,6 +80,7 @@ class PlanScreen extends StatefulWidget {
 class _PlanScreenState extends State<PlanScreen> {
   String _plan = 'free';
   int _aiRepliesUsed = 0;
+  String? _trialLine;
   bool _loading = true;
   String? _busy;
   BillingPeriod _period = BillingPeriod.yearly;
@@ -180,6 +181,7 @@ class _PlanScreenState extends State<PlanScreen> {
       setState(() {
         _plan = s.plan;
         _aiRepliesUsed = s.aiRepliesUsed;
+        _trialLine = s.trialLine;
         _loading = false;
       });
     }
@@ -543,7 +545,10 @@ class _PlanScreenState extends State<PlanScreen> {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
           children: [
             const Text('現在のプラン', style: TextStyle(fontWeight: FontWeight.bold)),
             const Spacer(),
@@ -561,6 +566,29 @@ class _PlanScreenState extends State<PlanScreen> {
                 ),
               ),
             ),
+          ],
+            ),
+            // トライアル中は、いつまで無料かをいつでも確認できるようにする（終了前の通知は送らない）。
+            if (_trialLine != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Icon(Icons.card_giftcard_rounded,
+                      size: 16, color: AppTheme.success),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(_trialLine!,
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'この日までに解約すれば料金はかかりません。解約は下の「サブスクリプションを管理・解約」から。',
+                style: TextStyle(fontSize: 12, height: 1.5, color: context.subtleC),
+              ),
+            ],
           ],
         ),
       ),

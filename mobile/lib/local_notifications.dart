@@ -23,14 +23,18 @@ class LocalNotifier {
   /// 旧バージョンで作った低評価専用チャンネル（見出し変更に伴い廃止）。
   static const _legacyChannelId = 'low_rating';
 
-  /// 初期化と通知許可のリクエスト。多重呼び出しは安全。
+  /// 初期化。多重呼び出しは安全。
+  ///
+  /// 通知の許可はここでは求めない。何のための通知か分からないまま OS のダイアログを出すと
+  /// 断られやすく、一度断られると設定アプリからしか戻せないため、
+  /// 説明の画面（[NotificationPrimer]）で同意を得てから [requestPermission] を呼ぶ。
   static Future<void> init() async {
     if (_ready) return;
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const darwin = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+      requestAlertPermission: false,
+      requestBadgePermission: false,
+      requestSoundPermission: false,
     );
     await _plugin.initialize(
       const InitializationSettings(android: android, iOS: darwin),
@@ -49,14 +53,50 @@ class LocalNotifier {
           importance: Importance.high,
         ),
       );
-      await impl?.requestNotificationsPermission();
-    } else if (Platform.isIOS) {
-      await _plugin
-          .resolvePlatformSpecificImplementation<
-              IOSFlutterLocalNotificationsPlugin>()
-          ?.requestPermissions(alert: true, badge: true, sound: true);
     }
     _ready = true;
+  }
+
+  /// OS の通知許可ダイアログを出す（すでに決まっていれば出ない）。
+  static Future<bool> requestPermission() async {
+    await init();
+    if (Platform.isAndroid) {
+      return await _plugin
+              .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin>()
+              ?.requestNotificationsPermission() ??
+          false;
+    }
+    if (Platform.isIOS) {
+      return await _plugin
+              .resolvePlatformSpecificImplementation<
+                  IOSFlutterLocalNotificationsPlugin>()
+              ?.requestPermissions(alert: true, badge: true, sound: true) ??
+          false;
+    }
+    return false;
+  }
+
+  /// ダイアログを出さずに、すでに許可されているかを調べる。
+  static Future<bool> alreadyAllowed() async {
+    await init();
+    try {
+      if (Platform.isAndroid) {
+        return await _plugin
+                .resolvePlatformSpecificImplementation<
+                    AndroidFlutterLocalNotificationsPlugin>()
+                ?.areNotificationsEnabled() ??
+            false;
+      }
+      if (Platform.isIOS) {
+        final p = await _plugin
+            .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin>()
+            ?.checkPermissions();
+        return p?.isEnabled ?? false;
+      }
+    } catch (_) {}
+    return false;
   }
 
   /// 任意の見出し・本文でバナーを出す。

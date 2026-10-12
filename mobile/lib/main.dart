@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
+import 'notification_primer.dart';
 import 'push.dart';
 import 'theme.dart';
 import 'screens/login_screen.dart';
@@ -39,14 +40,22 @@ Future<void> _setUpPush() async {
   await PushService.init();
   if (!PushService.configured) return;
 
+  // 許可を求めるのは、ホーム画面で通知の説明（NotificationPrimer）を見せたあと。
+  // 説明を済ませた人だけ、起動時・サインイン時に端末を登録し直す。
   final auth = Supabase.instance.client.auth;
+  Future<void> registerIfPrimed() async {
+    if (await NotificationPrimer.done()) {
+      await PushService.registerForCurrentUser();
+    }
+  }
+
   if (auth.currentSession != null) {
-    // 起動をブロックしない（通知の許可ダイアログを待って白画面にしない）。
-    unawaited(PushService.registerForCurrentUser());
+    // 起動をブロックしない。
+    unawaited(registerIfPrimed());
   }
   auth.onAuthStateChange.listen((state) {
     if (state.event == AuthChangeEvent.signedIn) {
-      unawaited(PushService.registerForCurrentUser());
+      unawaited(registerIfPrimed());
     }
   });
 }

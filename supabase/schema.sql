@@ -49,6 +49,14 @@ alter table profiles add column if not exists google_purchase_token text;
 alter table profiles add column if not exists google_expires_at timestamptz;
 create index if not exists idx_profiles_google_token on profiles (google_purchase_token);
 
+-- 無料トライアル中か（購入検証・ストア通知のたびにサーバーが更新）。
+-- 終了前の通知は送らない方針なので、プラン画面に「◯月◯日まで無料」を出すのに使う。
+alter table profiles add column if not exists in_trial boolean not null default false;
+
+-- Sign in with Apple のリフレッシュトークン（lib/crypto.ts で暗号化）。
+-- アカウント削除時に Apple 側の連携を取り消すために使う（App Store の要件）。
+alter table profiles add column if not exists apple_siwa_refresh_token text;
+
 -- リモートpush(FCM)の通知対象。モバイルの通知設定と同じ選択肢を持つ。
 --   all : すべての新着レビュー（既定） / low : ★1〜2のみ / off : 送らない
 -- 端末側の設定(SharedPreferences)だけではサーバーが知り得ないため、profiles に持つ。
@@ -438,6 +446,39 @@ $$;
 
 revoke all on function public.locked_reviews_preview(int) from public, anon;
 grant execute on function public.locked_reviews_preview(int) to authenticated;
+
+-- 分析タブの集計（クライアントから呼ぶ）。
+--
+-- 以前はモバイルが一覧と同じ直近200件を取ってから端末で平均を出していたため、
+-- レビューが多い人ほど数字が静かにずれていた。集計はDBで行い、件数に関係なく正しくする。
+-- security invoker なので reviews / replies / review_topics の RLS がそのまま効く
+-- （＝Free の閲覧範囲の外は集計にも入らない。一覧と数字が食い違わない）。
+create or replace function public.my_review_summary(p_app uuid default null, p_store text default null)
+returns table (
+  total bigint,
+  avg_rating numeric,
+  unreplied bigint,
+  by_rating jsonb,
+  topics jsonb
+) language sql stable security invoker set search_path = public as $$
+  with r as (
+    select rv.id, rv.rating
+    from reviews rv
+    where (p_app is null or rv.app_id = p_app)
+      and (p_store is null or rv.store = p_store)
+  )
+  select
+    (select count(*) from r)::bigint,
+    (select round(avg(rating)::numeric, 2) from r),
+    (select count(*) from r where not exists (select 1 from replies x where x.review_id = r.id))::bigint,
+    (select coalesce(jsonb_object_agg(rating::text, n), '{}'::jsonb)
+       from (select rating, count(*) n from r group by rating) g),
+    (select coalesce(jsonb_object_agg(topic, n), '{}'::jsonb)
+       from (select t.topic, count(*) n from review_topics t join r on r.id = t.review_id group by t.topic) g2);
+$$;
+
+revoke all on function public.my_review_summary(uuid, text) from public, anon;
+grant execute on function public.my_review_summary(uuid, text) to authenticated;
 
 -- security definer 関数はサーバー(service_role)からのみ呼ぶ。
 -- クライアントが直接RPCして枠を払い戻す等ができないよう明示的に剥奪する。
