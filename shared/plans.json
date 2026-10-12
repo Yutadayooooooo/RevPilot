@@ -1,0 +1,90 @@
+{
+  "$comment": "プラン定義の唯一の正。Web は lib/plans.ts / lib/plan.ts が直接 import し、Flutter は `npm run gen:plans` で mobile/lib/plan_catalog.g.dart を生成する。変更したら必ず gen:plans を実行すること（npm run check:plans でズレを検出できる）。DB側の上限（supabase/schema.sql の enforce_app_limit / reviews のRLS / consume_ai_units）は別途手で合わせる。",
+  "plans": [
+    {
+      "key": "free",
+      "name": "Free",
+      "tagline": "まず1本のアプリで試す",
+      "features": ["1アプリ", "レビュー履歴 30日", "AI返信 月3件", "自動取得 毎時・新着通知"],
+      "limits": {
+        "maxApps": 1,
+        "historyDays": 30,
+        "aiUnitsPerMonth": 30,
+        "bulkReplyLimit": 1,
+        "pollIntervalHours": 1,
+        "topicAnalysis": false,
+        "weeklySummary": false
+      }
+    },
+    {
+      "key": "pro",
+      "name": "Pro",
+      "tagline": "個人開発者の標準",
+      "popular": true,
+      "trialLabel": "1か月",
+      "trialPeriod": "P1M",
+      "features": [
+        "アプリ数 無制限",
+        "レビュー履歴 無期限",
+        "AI返信 月300件",
+        "一括返信 最大20件",
+        "トピック分析",
+        "週次サマリー"
+      ],
+      "limits": {
+        "maxApps": null,
+        "historyDays": null,
+        "aiUnitsPerMonth": 3000,
+        "bulkReplyLimit": 20,
+        "pollIntervalHours": 1,
+        "topicAnalysis": true,
+        "weeklySummary": true
+      },
+      "prices": {
+        "monthly": { "yen": 1480, "productId": "jp.revpilot.app.pro.monthly" },
+        "yearly": { "yen": 14800, "productId": "jp.revpilot.app.pro.yearly" }
+      },
+      "priceEnv": "STRIPE_PRICE_PRO"
+    },
+    {
+      "key": "max",
+      "name": "Max",
+      "tagline": "レビューが多い・返信量が多い方へ",
+      "features": ["Pro のすべて", "AI返信 月1,000件", "一括返信 最大50件", "優先サポート"],
+      "limits": {
+        "maxApps": null,
+        "historyDays": null,
+        "aiUnitsPerMonth": 10000,
+        "bulkReplyLimit": 50,
+        "pollIntervalHours": 1,
+        "topicAnalysis": true,
+        "weeklySummary": true
+      },
+      "prices": {
+        "monthly": { "yen": 2980, "productId": "jp.revpilot.app.max.monthly" },
+        "yearly": { "yen": 29800, "productId": "jp.revpilot.app.max.yearly" }
+      },
+      "priceEnv": "STRIPE_PRICE_MAX"
+    },
+    {
+      "key": "team",
+      "name": "Team",
+      "tagline": "チームで運用する",
+      "hidden": true,
+      "features": ["Maxの全機能", "複数メンバーで共有", "メンバー別の権限・履歴", "まとめて請求"],
+      "limits": {
+        "maxApps": null,
+        "historyDays": null,
+        "aiUnitsPerMonth": 20000,
+        "bulkReplyLimit": 50,
+        "pollIntervalHours": 1,
+        "topicAnalysis": true,
+        "weeklySummary": true
+      },
+      "prices": {
+        "monthly": { "yen": 5800, "productId": null }
+      },
+      "priceEnv": "STRIPE_PRICE_TEAM"
+    }
+  ]
+}

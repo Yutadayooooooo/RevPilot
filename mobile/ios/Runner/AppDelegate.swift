@@ -1,4 +1,5 @@
 import Flutter
+import StoreKit
 import UIKit
 import UserNotifications
 
@@ -23,5 +24,33 @@ import UserNotifications
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    // サブスクの管理・解約を、アプリ内の StoreKit シートで開く（iOS 15+）。
+    // apps.apple.com のURLだとアプリの外へ出てしまい、Sandbox の購読はそこに表示されない。
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "RevPilotSubscriptions") {
+      let channel = FlutterMethodChannel(
+        name: "revpilot/subscriptions", binaryMessenger: registrar.messenger())
+      channel.setMethodCallHandler { call, result in
+        guard call.method == "showManageSubscriptions" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        guard #available(iOS 15.0, *),
+          let scene = UIApplication.shared.connectedScenes
+            .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene
+        else {
+          result(false)
+          return
+        }
+        Task { @MainActor in
+          do {
+            try await AppStore.showManageSubscriptions(in: scene)
+            result(true)
+          } catch {
+            result(false)
+          }
+        }
+      }
+    }
   }
 }

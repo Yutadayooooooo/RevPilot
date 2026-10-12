@@ -1,3 +1,4 @@
+import catalog from "@/shared/plans.json";
 import type { PlanKey } from "./plans";
 
 /**
@@ -72,6 +73,11 @@ export const AI_UNITS = {
  *     Pro  3,000 units = 返信300件  = ¥420   → 粗利 ¥838（原価率33%）
  *     Max  10,000 units= 返信1,000件= ¥1,400 → 粗利 ¥1,133（原価率55%）
  *
+ *   年額（2026-10 追加）でも上限に張り付いたユーザーで黒字を保つ:
+ *     Pro ¥14,800/年 → 純収入 月あたり ¥1,048 → 粗利 ¥628（原価率40%）
+ *     Max ¥29,800/年 → 純収入 月あたり ¥2,111 → 粗利 ¥711（原価率66%）
+ *   無料トライアル（Pro 1か月）の原価は最大でも返信300件ぶん ¥420。
+ *
  *   なぜアプリ数の上限を外したか
  *     アプリ数は原価にほぼ影響しない（取得はAI原価ゼロ）。分類の原価はAI枠で頭打ちに
  *     なるので、アプリ数を無制限にしても損失は増えない。一方でアプリ数の制限は
@@ -81,45 +87,11 @@ export const AI_UNITS = {
  *     注記付きの「無制限」は打消し表示として景表法上のリスクを負うだけで、
  *     実額を書くのに比べて得るものがない。AI件数は実数を出す。
  */
-export const PLAN_LIMITS: Record<PlanKey, PlanLimits> = {
-  free: {
-    maxApps: 1,
-    historyDays: 30,
-    aiUnitsPerMonth: 30,
-    bulkReplyLimit: 1,
-    pollIntervalHours: 1,
-    topicAnalysis: false,
-    weeklySummary: false,
-  },
-  pro: {
-    maxApps: null,
-    historyDays: null,
-    aiUnitsPerMonth: 3_000,
-    bulkReplyLimit: 20,
-    pollIntervalHours: 1,
-    topicAnalysis: true,
-    weeklySummary: true,
-  },
-  max: {
-    maxApps: null,
-    historyDays: null,
-    aiUnitsPerMonth: 10_000,
-    bulkReplyLimit: 50,
-    pollIntervalHours: 1,
-    topicAnalysis: true,
-    weeklySummary: true,
-  },
-  // Team は現在非公開（共有・権限機能が未実装のため販売停止）。既存の plan 値のために定義は残す。
-  team: {
-    maxApps: null,
-    historyDays: null,
-    aiUnitsPerMonth: 20_000,
-    bulkReplyLimit: 50,
-    pollIntervalHours: 1,
-    topicAnalysis: true,
-    weeklySummary: true,
-  },
-};
+// 数値の実体は shared/plans.json（Flutter 側と共有）。上の根拠を変えたらJSONを更新する。
+// Team は現在非公開（共有・権限機能が未実装のため販売停止）。既存の plan 値のために定義は残す。
+export const PLAN_LIMITS = Object.fromEntries(
+  catalog.plans.map((p) => [p.key, p.limits as PlanLimits])
+) as Record<PlanKey, PlanLimits>;
 
 /** plan文字列（不正値含む）から制限を取得。未知の値はFree扱い。 */
 export function limitsForPlan(plan: string | null | undefined): PlanLimits {

@@ -10,12 +10,8 @@
     ]
   },
   "identifier" : "REVPILOT_STOREKIT",
-  "nonRenewingSubscriptions" : [
-
-  ],
-  "products" : [
-
-  ],
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
   "settings" : {
     "_askToBuyEnabled" : false,
     "_billingGracePeriodEnabled" : false,
@@ -25,23 +21,17 @@
     "_locale" : "ja",
     "_renewalBillingIssuesEnabled" : false,
     "_storefront" : "JPN",
-    "_storeKitErrors" : [
-
-    ],
+    "_storeKitErrors" : [],
     "_timeRate" : 0
   },
   "subscriptionGroups" : [
     {
       "id" : "revpilot_group",
-      "localizations" : [
-
-      ],
+      "localizations" : [],
       "name" : "RevPilot Plans",
       "subscriptions" : [
         {
-          "adHocOffers" : [
-
-          ],
+          "adHocOffers" : [],
           "billingPlans" : [
             {
               "billingPlanType" : "BILLED_UPFRONT",
@@ -51,15 +41,18 @@
               "isEnabled" : true
             }
           ],
-          "codeOffers" : [
-
-          ],
+          "codeOffers" : [],
           "displayPrice" : "1480",
           "familyShareable" : false,
-          "groupNumber" : 1,
+          "groupNumber" : 2,
           "internalID" : "revpilot_pro",
           "introductoryOffers" : [
-
+            {
+              "internalID" : "PRO_M_TRIAL",
+              "numberOfPeriods" : 1,
+              "paymentMode" : "free",
+              "subscriptionPeriod" : "P1M"
+            }
           ],
           "localizations" : [
             {
@@ -73,14 +66,48 @@
           "referenceName" : "RevPilot Pro",
           "subscriptionGroupID" : "revpilot_group",
           "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
+          "winbackOffers" : []
         },
         {
-          "adHocOffers" : [
-
+          "adHocOffers" : [],
+          "billingPlans" : [
+            {
+              "billingPlanType" : "BILLED_UPFRONT",
+              "commitmentDisplayPrice" : "14800",
+              "displayPrice" : "14800",
+              "internalID" : "REVPILOT",
+              "isEnabled" : true
+            }
           ],
+          "codeOffers" : [],
+          "displayPrice" : "14800",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "revpilot_pro_yearly",
+          "introductoryOffers" : [
+            {
+              "internalID" : "PRO_Y_TRIAL",
+              "numberOfPeriods" : 1,
+              "paymentMode" : "free",
+              "subscriptionPeriod" : "P1M"
+            }
+          ],
+          "localizations" : [
+            {
+              "description" : "アプリ数無制限・レビュー履歴は無期限・AI返信 月300件",
+              "displayName" : "RevPilot Pro（年額）",
+              "locale" : "ja"
+            }
+          ],
+          "productID" : "jp.revpilot.app.pro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "RevPilot Pro（年額）",
+          "subscriptionGroupID" : "revpilot_group",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
           "billingPlans" : [
             {
               "billingPlanType" : "BILLED_UPFRONT",
@@ -90,16 +117,12 @@
               "isEnabled" : true
             }
           ],
-          "codeOffers" : [
-
-          ],
+          "codeOffers" : [],
           "displayPrice" : "2980",
           "familyShareable" : false,
-          "groupNumber" : 2,
+          "groupNumber" : 1,
           "internalID" : "revpilot_max",
-          "introductoryOffers" : [
-
-          ],
+          "introductoryOffers" : [],
           "localizations" : [
             {
               "description" : "Proの全機能・AI返信 月1,000件・一括返信 最大50件",
@@ -112,9 +135,38 @@
           "referenceName" : "RevPilot Max",
           "subscriptionGroupID" : "revpilot_group",
           "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
+          "winbackOffers" : []
+        },
+        {
+          "adHocOffers" : [],
+          "billingPlans" : [
+            {
+              "billingPlanType" : "BILLED_UPFRONT",
+              "commitmentDisplayPrice" : "29800",
+              "displayPrice" : "29800",
+              "internalID" : "REVPILOT",
+              "isEnabled" : true
+            }
+          ],
+          "codeOffers" : [],
+          "displayPrice" : "29800",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "revpilot_max_yearly",
+          "introductoryOffers" : [],
+          "localizations" : [
+            {
+              "description" : "Proの全機能・AI返信 月1,000件・一括返信 最大50件",
+              "displayName" : "RevPilot Max（年額）",
+              "locale" : "ja"
+            }
+          ],
+          "productID" : "jp.revpilot.app.max.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "RevPilot Max（年額）",
+          "subscriptionGroupID" : "revpilot_group",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : []
         }
       ]
     }

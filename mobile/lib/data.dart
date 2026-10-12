@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
 import 'models.dart';
+import 'plan_catalog.g.dart';
 
 /// Supabaseへのデータアクセス。RLSにより自分のデータのみ返る。
 /// サーバー秘密鍵が必要な処理（暗号化・AI・課金・ストア投稿/取得）だけAPIを叩き、
@@ -51,7 +52,8 @@ class Repo {
     } catch (_) {}
     if (res.statusCode >= 200 && res.statusCode < 300) return json;
     throw ApiException(
-        (json['error'] as String?) ?? 'エラーが発生しました (${res.statusCode})');
+        (json['error'] as String?) ?? 'エラーが発生しました (${res.statusCode})',
+        statusCode: res.statusCode);
   }
 
   // ---- アプリ（直接Supabase / RLSで自分のみ） ----
@@ -308,8 +310,7 @@ class Repo {
   // 開くフォールバックがあり、これは確実にリジェクトされる実装だった。
 
   /// iOSのIAP購入/復元をサーバーで確定し、profiles.plan に反映する。
-  /// 返り値は反映後のプランキー（'pro' 等）。
-  static Future<String> confirmApplePurchase({
+  static Future<PurchaseConfirmation> confirmApplePurchase({
     required String productId,
     String? transactionId,
     String? verificationData,
@@ -323,12 +324,12 @@ class Repo {
       },
       timeout: const Duration(seconds: 45), // Appleへの問い合わせを含む
     );
-    return (json['plan'] as String?) ?? 'free';
+    return PurchaseConfirmation.fromJson(json);
   }
 
   /// AndroidのGoogle Play課金をサーバーで確定し、profiles.plan に反映する。
   /// verificationData は purchaseToken。
-  static Future<String> confirmGooglePurchase({
+  static Future<PurchaseConfirmation> confirmGooglePurchase({
     required String productId,
     required String purchaseToken,
   }) async {
@@ -337,7 +338,7 @@ class Repo {
       {'productId': productId, 'purchaseToken': purchaseToken},
       timeout: const Duration(seconds: 45), // Googleへの問い合わせを含む
     );
-    return (json['plan'] as String?) ?? 'free';
+    return PurchaseConfirmation.fromJson(json);
   }
 
   // ---- アカウント削除（退会 / Apple審査要件） ----
@@ -417,6 +418,28 @@ class Repo {
         await _db.from('profiles').select('plan').eq('id', uid).maybeSingle();
     return (row?['plan'] as String?) ?? 'free';
   }
+
+  /// 課金画面用の契約状況（プランと今月のAI使用量）。
+  static Future<BillingStatus> billingStatus() async {
+    final uid = _db.auth.currentUser?.id;
+    if (uid == null) return const BillingStatus(plan: 'free', aiUnitsUsed: 0);
+    final now = DateTime.now().toUtc();
+    final ym = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    final results = await Future.wait([
+      _db.from('profiles').select('plan').eq('id', uid).maybeSingle(),
+      _db
+          .from('ai_usage')
+          .select('units')
+          .eq('user_id', uid)
+          .eq('ym', ym)
+          .maybeSingle()
+          .catchError((_) => null),
+    ]);
+    return BillingStatus(
+      plan: (results[0]?['plan'] as String?) ?? 'free',
+      aiUnitsUsed: (results[1]?['units'] as num?)?.toInt() ?? 0,
+    );
+  }
 }
 
 /// レビューの並び替え順。
@@ -431,40 +454,83 @@ extension ReviewSortLabel on ReviewSort {
       };
 }
 
-/// プラン別アプリ数上限（null=無制限）。lib/plan.ts の PLAN_LIMITS と一致させる。
+/// プラン定義（shared/plans.json から生成）。未知の値は Free 扱い。
+PlanDef planDef(String plan) => planCatalog.firstWhere(
+      (p) => p.key == plan,
+      orElse: () => planCatalog.firstWhere((p) => p.key == 'free'),
+    );
+
+/// プラン別アプリ数上限（null=無制限）。
 /// 有料プランは無制限（アプリ数は原価にほぼ影響せず、制限しても離脱を招くだけのため）。
-int? planMaxApps(String plan) => switch (plan) {
-      'pro' || 'max' || 'team' => null,
-      _ => 1,
-    };
+int? planMaxApps(String plan) => planDef(plan).limits.maxApps;
 
 /// プラン別のレビュー履歴の閲覧範囲（日数）。null=無期限。
 ///
 /// 実際の制限はサーバー側（reviews のRLSポリシー）で強制されている。
 /// ここはUIで「これ以上前は表示されない」と伝えるための写し。
-int? planHistoryDays(String plan) => switch (plan) {
-      'pro' || 'max' || 'team' => null,
-      _ => 30,
-    };
+int? planHistoryDays(String plan) => planDef(plan).limits.historyDays;
 
-/// 一括返信の1回あたり上限（1=一括不可）。lib/plan.ts の PLAN_LIMITS と一致させる。
+/// 一括返信の1回あたり上限（1=一括不可）。
 ///
 /// 「無制限」は廃止した。1リクエストで無制限に処理させると、関数の実行時間上限を
 /// 超えて中途半端に打ち切られ、課金だけ発生して結果が返らない事故になるため。
-int planBulkLimit(String plan) => switch (plan) {
-      'max' || 'team' => 50,
-      'pro' => 20,
-      _ => 1,
-    };
+int planBulkLimit(String plan) => planDef(plan).limits.bulkReplyLimit;
+
+/// 返信ドラフト1件あたりの units。lib/plan.ts の AI_UNITS.reply と一致させる。
+const aiUnitsPerReply = 10;
+
+/// 月あたりのAI返信件数（units を返信件数に換算）。
+int planAiReplies(String plan) =>
+    planDef(plan).limits.aiUnitsPerMonth ~/ aiUnitsPerReply;
 
 String planLabel(String plan) =>
-    const {'free': 'Free', 'pro': 'Pro', 'max': 'Max', 'team': 'Team'}[plan] ??
-    plan;
+    planCatalog.where((p) => p.key == plan).firstOrNull?.name ?? plan;
+
+/// 課金画面で使う、利用者の契約状況。
+class BillingStatus {
+  final String plan;
+
+  /// 今月使ったAIの units（ai_usage）。
+  final int aiUnitsUsed;
+
+  const BillingStatus({required this.plan, required this.aiUnitsUsed});
+
+  int get aiRepliesUsed => aiUnitsUsed ~/ aiUnitsPerReply;
+}
+
+/// 購入をサーバーで確定した結果。
+class PurchaseConfirmation {
+  final String plan;
+
+  /// 無料トライアル中か（終了前のお知らせを予約するのに使う）。
+  final bool inTrial;
+  final DateTime? expiresAt;
+
+  const PurchaseConfirmation({
+    required this.plan,
+    required this.inTrial,
+    required this.expiresAt,
+  });
+
+  factory PurchaseConfirmation.fromJson(Map<String, dynamic> json) =>
+      PurchaseConfirmation(
+        plan: (json['plan'] as String?) ?? 'free',
+        inTrial: json['inTrial'] == true,
+        expiresAt: DateTime.tryParse((json['expiresAt'] as String?) ?? ''),
+      );
+}
 
 /// APIエラー（ユーザー向けメッセージを保持）。
 class ApiException implements Exception {
   final String message;
-  const ApiException(this.message);
+
+  /// サーバーが返したHTTPステータス（通信前の失敗では null）。
+  final int? statusCode;
+  const ApiException(this.message, {this.statusCode});
+
+  /// Free の上限（アプリ数・AI枠）に当たったことを示すエラーか。
+  /// サーバーは 403 と「Proにアップグレード…」の案内文で返す（lib/plan.ts / app/api/apps）。
+  bool get isPlanLimit => statusCode == 403 && message.contains('アップグレード');
   @override
   String toString() => message;
 }

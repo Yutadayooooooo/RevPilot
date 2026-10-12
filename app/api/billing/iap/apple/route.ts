@@ -82,5 +82,6 @@ export async function POST(req: NextRequest) {
     plan: result.plan,
     method: result.method,
     expiresAt: result.expiresAt?.toISOString() ?? null,
+    inTrial: result.inTrial,
   });
 }
