@@ -184,11 +184,11 @@ Apple / Google ログイン（2026-10-12 追加）の分を足した最終版。
 
 ## 5. 必要なビジュアル素材
 
-- [ ] App Store: 6.9" スクリーンショット（1320×2868、必須）。6.5" は 6.9" から自動縮小されるので任意
-- [ ] App Store: 1024×1024 アイコン（生成済み: `mobile/assets/branding/`）
-- [ ] Google Play: スマホ用スクショ 最低2枚（推奨 1080×1920 以上、最大8枚）
-- [ ] Google Play: フィーチャーグラフィック 1024×500
-- [ ] Google Play: 512×512 アイコン
+- [x] App Store: 6.9" スクリーンショット（1320×2868、6枚）。6.5" は 6.9" から自動縮小されるので不要
+- [x] App Store: 1024×1024 アイコン（生成済み: `mobile/assets/branding/`）
+- [x] Google Play: スマホ用スクショ（1080×1920、6枚）
+- [x] Google Play: フィーチャーグラフィック 1024×500
+- [ ] Google Play: 512×512 アイコン（`icon_opaque.png` を縮小して使う）
 
 スクショの並び（1枚目で価値が伝わる順。各枚に上部キャプションを入れる）:
 1. 受信箱 …「App Store と Google Play のレビューを一か所に」
@@ -196,7 +196,18 @@ Apple / Google ログイン（2026-10-12 追加）の分を足した最終版。
 3. ★1〜2の通知 …「低評価にすぐ気づける」
 4. 保存済みレビューのチラ見せ …「消えるレビューも全期間保存（Pro）」
 5. 分析（星の推移・トピック）…「何が評価を下げているか分かる」
-6. プラン画面 …「Pro は1か月無料」
+6. ダークモード …「ダークモードにも対応」（「Pro は1か月無料」は4枚目に入れた）
+
+生成物はプロジェクトの `release/store-assets/`（`ios69/`・`android/`）。作り直すときは、表示用の
+日本語フォント（Noto Sans JP の ttf）を用意して次を実行する（ダミーデータで画面を描く。実データは使わない）。
+
+```
+cd mobile
+flutter test test/store_shots/store_shots_test.dart --update-goldens \
+  --dart-define=OUT=$PWD/../build/storeshots \
+  --dart-define=FONTS=/path/to/NotoSansJP \
+  --dart-define=SDK=$(dirname $(dirname $(which flutter)))
+```
 
 ---
 
