@@ -243,9 +243,11 @@ flutter test test/store_shots/store_shots_test.dart --update-goldens \
 - [ ] バージョン・ビルド番号の設定（`pubspec.yaml`）
 > 詳細な手順は `docs/release-setup.md` を参照。
 - [ ] Firebase プロジェクト作成 → APNs認証キーの登録 → `FIREBASE_*` の設定（push通知）
-- [ ] Apple: App Privacy 申告 / Google: データセーフティ申告（4章の表で入力）
-- [ ] Sign in with Apple: App ID で有効化、SIWA 用キー作成 → `APPLE_SIWA_*` を Cloudflare に設定
-- [ ] Google ログイン: Google Cloud で Web / iOS の OAuth クライアント作成 → Supabase の Apple・Google プロバイダ有効化 →
-      `GOOGLE_WEB_CLIENT_ID` / `GOOGLE_IOS_CLIENT_ID` をビルド設定へ、iOS は Info.plist に逆順クライアントIDの URL スキーム
+- [x] Apple: App Privacy 申告（4章の7種類で公開済み、2026-10-12）
+- [ ] Google: データセーフティ申告（Play デベロッパーアカウント作成後）
+- [x] Sign in with Apple: App ID で有効化、SIWA 用キー（Key ID 6D9XF8JPVM）作成 → `APPLE_SIWA_*`・`APPLE_TEAM_ID` を Cloudflare に設定（2026-10-12）
+- [x] Google ログイン: GCP（revpilot-bf3b9）で Web / iOS の OAuth クライアント作成、Supabase の Apple・Google プロバイダ有効化、
+      クライアントIDは `config.dart` の既定値と Info.plist に反映（2026-10-12）
+- [ ] Google ログイン（Android）: Play Console のアプリ署名鍵の SHA-1 で Android 用 OAuth クライアントを作成（Play のアプリ作成後）
 - [ ] テストアカウント（審査員用）の用意と備考欄への記載
       ※ストア連携なしでも画面が確認できるよう、レビュー投入済みのアカウントを用意する
