@@ -9,6 +9,7 @@ import 'push.dart';
 import 'theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/intro_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,8 +68,24 @@ class RevPilotApp extends StatelessWidget {
 }
 
 /// ログイン状態を監視し、未ログインならログイン画面、ログイン済みならホームへ。
-class AuthGate extends StatelessWidget {
+/// 初回起動（未ログインかつ紹介を見ていない）ときだけ、ログインの前に紹介を挟む。
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool? _introSeen;
+
+  @override
+  void initState() {
+    super.initState();
+    IntroScreen.seen().then((v) {
+      if (mounted) setState(() => _introSeen = v);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +93,20 @@ class AuthGate extends StatelessWidget {
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
         final session = Supabase.instance.client.auth.currentSession;
+        final Widget child;
+        if (session != null) {
+          child = const HomeScreen(key: ValueKey('home'));
+        } else if (_introSeen == null) {
+          // 端末設定の読み込み待ち（一瞬）。ログイン画面を一度出してから紹介に変わるのを避ける。
+          child = const SizedBox.shrink(key: ValueKey('wait'));
+        } else if (_introSeen == false) {
+          child = IntroScreen(
+            key: const ValueKey('intro'),
+            onDone: () => setState(() => _introSeen = true),
+          );
+        } else {
+          child = const LoginScreen(key: ValueKey('login'));
+        }
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 350),
           switchInCurve: Curves.easeOut,
@@ -83,9 +114,7 @@ class AuthGate extends StatelessWidget {
             opacity: anim,
             child: child,
           ),
-          child: session == null
-              ? const LoginScreen(key: ValueKey('login'))
-              : const HomeScreen(key: ValueKey('home')),
+          child: child,
         );
       },
     );

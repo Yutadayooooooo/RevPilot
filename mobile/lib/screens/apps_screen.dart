@@ -103,6 +103,9 @@ class _AppEditScreenState extends State<AppEditScreen> {
   late final TextEditingController _name;
   late final TextEditingController _desc;
   late String _tone;
+  late final TextEditingController _opening;
+  late final TextEditingController _closing;
+  late final TextEditingController _rules;
   bool _saving = false;
 
   bool get _isEdit => widget.existing != null;
@@ -116,6 +119,9 @@ class _AppEditScreenState extends State<AppEditScreen> {
     _name = TextEditingController(text: e?.name ?? '');
     _desc = TextEditingController(text: e?.description ?? '');
     _tone = e?.replyTone ?? 'polite';
+    _opening = TextEditingController(text: e?.replyOpening ?? '');
+    _closing = TextEditingController(text: e?.replyClosing ?? '');
+    _rules = TextEditingController(text: e?.replyRules ?? '');
   }
 
   @override
@@ -123,6 +129,9 @@ class _AppEditScreenState extends State<AppEditScreen> {
     _appId.dispose();
     _name.dispose();
     _desc.dispose();
+    _opening.dispose();
+    _closing.dispose();
+    _rules.dispose();
     super.dispose();
   }
 
@@ -134,10 +143,20 @@ class _AppEditScreenState extends State<AppEditScreen> {
     setState(() => _saving = true);
     try {
       if (_isEdit) {
-        await Repo.updateApp(widget.existing!.id,
+        final e = widget.existing!;
+        final style = <String, String?>{
+          if (_trimmed(_opening) != _blankToNull(e.replyOpening))
+            'reply_opening': _trimmed(_opening),
+          if (_trimmed(_closing) != _blankToNull(e.replyClosing))
+            'reply_closing': _trimmed(_closing),
+          if (_trimmed(_rules) != _blankToNull(e.replyRules))
+            'reply_rules': _trimmed(_rules),
+        };
+        await Repo.updateApp(e.id,
             name: _name.text.trim(),
             description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
-            tone: _tone);
+            tone: _tone,
+            style: style);
       } else {
         await Repo.addApp(
           store: _store,
@@ -145,6 +164,9 @@ class _AppEditScreenState extends State<AppEditScreen> {
           name: _name.text.trim(),
           description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
           tone: _tone,
+          replyOpening: _trimmed(_opening),
+          replyClosing: _trimmed(_closing),
+          replyRules: _trimmed(_rules),
         );
       }
       HapticFeedback.lightImpact();
@@ -154,6 +176,80 @@ class _AppEditScreenState extends State<AppEditScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  static String? _blankToNull(String? s) =>
+      (s == null || s.trim().isEmpty) ? null : s.trim();
+
+  static String? _trimmed(TextEditingController c) => _blankToNull(c.text);
+
+  /// 迷わず始められるよう、よくある形の例を入れる（入力済みの欄は上書きしない）。
+  void _fillExample() {
+    HapticFeedback.selectionClick();
+    final name = _name.text.trim().isEmpty ? 'アプリ' : _name.text.trim();
+    setState(() {
+      if (_opening.text.trim().isEmpty) {
+        _opening.text = '$nameをご利用いただき、ありがとうございます。';
+      }
+      if (_closing.text.trim().isEmpty) {
+        _closing.text = '今後とも$nameをよろしくお願いいたします。（$name 開発チーム）';
+      }
+      if (_rules.text.trim().isEmpty) {
+        _rules.text = '不具合の報告には、設定画面の「お問い合わせ」から詳細を送ってもらうよう案内する。'
+            '「検討します」だけで終わらせない。';
+      }
+    });
+  }
+
+  Widget _replyStyleSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text('返信スタイル（任意）',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
+            TextButton(onPressed: _fillExample, child: const Text('例を入れる')),
+          ],
+        ),
+        Text(
+          'AIが作る返信の書き出し・結び・守ってほしいことを決めておくと、'
+          'どの返信も同じ調子にそろいます。',
+          style: TextStyle(fontSize: 12, height: 1.5, color: context.subtleC),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _opening,
+          maxLength: 100,
+          decoration: const InputDecoration(
+            labelText: '書き出し',
+            hintText: '例: ○○をご利用いただきありがとうございます。',
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextField(
+          controller: _closing,
+          maxLength: 100,
+          decoration: const InputDecoration(
+            labelText: '結び・署名',
+            hintText: '例: ○○開発チーム',
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextField(
+          controller: _rules,
+          maxLines: 3,
+          maxLength: 300,
+          decoration: const InputDecoration(
+            labelText: '守ってほしいこと',
+            hintText: '例: 問い合わせ先は support@example.com を案内する',
+            alignLabelWithHint: true,
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _delete() async {
@@ -248,6 +344,8 @@ class _AppEditScreenState extends State<AppEditScreen> {
             onSelectionChanged: (s) => setState(() => _tone = s.first),
           ),
           const SizedBox(height: 24),
+          _replyStyleSection(),
+          const SizedBox(height: 16),
           FilledButton(
             onPressed: _saving ? null : _save,
             child: _saving

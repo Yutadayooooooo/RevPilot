@@ -74,6 +74,9 @@ class Repo {
     required String name,
     String? description,
     String tone = 'polite',
+    String? replyOpening,
+    String? replyClosing,
+    String? replyRules,
   }) async {
     // アプリ追加はAPI経由にする。
     // 追加の時点でストア側のアクセス権（App IDの誤り・権限不足）を確認できるため、
@@ -87,22 +90,30 @@ class Repo {
         'name': name,
         'description': description,
         'reply_tone': tone,
+        'reply_opening': replyOpening,
+        'reply_closing': replyClosing,
+        'reply_rules': replyRules,
       },
       timeout: const Duration(seconds: 45), // ストアへの疎通確認を含む
     );
     return AppRow.fromJson(Map<String, dynamic>.from(json['app'] as Map));
   }
 
+  /// アプリの編集。[style] は変更した欄だけを渡す（null の値は「空にする」）。
+  /// 触っていない列を送らないのは、返信スタイルの列が未適用のDBでも
+  /// 名前やトーンの編集が失敗しないようにするため。
   static Future<void> updateApp(
     String id, {
     required String name,
     String? description,
     required String tone,
+    Map<String, String?> style = const {},
   }) async {
     await _db.from('apps').update({
       'name': name,
       'description': description,
       'reply_tone': tone,
+      ...style,
     }).eq('id', id);
   }
 
@@ -184,6 +195,18 @@ class Repo {
           .toList();
     } catch (_) {
       return [];
+    }
+  }
+
+  /// Free の閲覧範囲より前にある、保存済みレビューの件数と抜粋。
+  /// 関数が未作成（スキーマ未適用）でも画面を落とさないよう、失敗時は空を返す。
+  static Future<LockedPreview> lockedPreview({int limit = 3}) async {
+    try {
+      final rows = await _db
+          .rpc('locked_reviews_preview', params: {'p_limit': limit});
+      return LockedPreview.fromRows(rows as List);
+    } catch (_) {
+      return LockedPreview.empty;
     }
   }
 

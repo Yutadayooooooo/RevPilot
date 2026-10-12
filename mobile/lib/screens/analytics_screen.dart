@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../data.dart';
+import '../locked_preview.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -22,6 +23,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   List<AppRow> _apps = [];
   String? _appId; // 特定アプリで絞り込み
   String? _store; // 特定ストア全体で絞り込み（appIdとは排他）
+  String _plan = 'free';
+  LockedPreview _locked = LockedPreview.empty;
 
   @override
   void initState() {
@@ -29,6 +32,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     _future = Repo.reviews();
     Repo.apps().then((a) {
       if (mounted) setState(() => _apps = a);
+    }).catchError((_) {});
+    Repo.plan().then((p) {
+      if (mounted) setState(() => _plan = p);
+      return p == 'free' ? Repo.lockedPreview() : Future.value(LockedPreview.empty);
+    }).then((l) {
+      if (mounted) setState(() => _locked = l);
     }).catchError((_) {});
   }
 
@@ -71,6 +80,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     return const _AnalyticsSkeleton();
                   }
                   final reviews = snap.data ?? [];
+                  // 閲覧範囲内は空でも、それより前に保存済みのレビューがあるなら
+                  // 「データがない」とは言わずにチラ見せする（件数は全アプリ合計）。
+                  if (reviews.isEmpty && _locked.hasHidden) {
+                    return ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [LockedReviewsTeaser(_locked)],
+                    );
+                  }
                   if (reviews.isEmpty) {
                     return ListView(children: const [
                       SizedBox(height: 80),
@@ -94,7 +111,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       const SizedBox(height: 16),
                       staggered(_ratingDistribution(reviews)),
                       const SizedBox(height: 16),
-                      staggered(_topicBreakdown(reviews)),
+                      staggered(planDef(_plan).limits.topicAnalysis
+                          ? _topicBreakdown(reviews)
+                          : const LockedTopicsCard()),
+                      if (_locked.hasHidden) ...[
+                        const SizedBox(height: 16),
+                        staggered(LockedReviewsTeaser(_locked)),
+                      ],
                     ],
                   );
                 },

@@ -94,6 +94,15 @@ alter table apps add column if not exists last_polled_at timestamptz;
 alter table apps add column if not exists last_error text;
 alter table apps add column if not exists last_error_at timestamptz;
 
+-- 返信スタイル（AI返信に統一感を持たせるための、アプリごとの決まりごと）。
+--   reply_opening : 冒頭の挨拶（例: 「〇〇をご利用いただきありがとうございます。」）
+--   reply_closing : 結び・署名（例: 「〇〇開発チーム」）
+--   reply_rules   : 必ず守ること（問い合わせ先・使わない言葉など）
+-- どれも任意。空ならこれまでどおりトーンとアプリ概要だけで書く。
+alter table apps add column if not exists reply_opening text;
+alter table apps add column if not exists reply_closing text;
+alter table apps add column if not exists reply_rules text;
+
 -- レビュー本体
 create table if not exists reviews (
   id uuid primary key default gen_random_uuid(),
@@ -383,6 +392,52 @@ language sql stable security definer set search_path = public as $$
   group by 1
   order by 1;
 $$;
+
+-- Free の「履歴の壁」の向こう側にあるレビューの件数と、ぼかして見せる数件の抜粋。
+--
+-- RLS で隠しているだけだと、30日より前にしかレビューが無い利用者には
+-- 「レビューがありません」と出てしまい、実際は保存されていることが伝わらない。
+-- 件数・評価・日付と本文の冒頭だけを返し、全文は返さない（全文はアップグレードで RLS が開く）。
+-- auth.uid() で本人に限定するので、クライアントから直接呼べるようにしてある。
+create or replace function public.locked_reviews_preview(p_limit int default 3)
+returns table (
+  hidden_total bigint,
+  hidden_low bigint,
+  rating int,
+  reviewed_at timestamptz,
+  app_name text,
+  snippet text
+) language sql stable security definer set search_path = public as $$
+  with me as (
+    select plan_history_days(p.plan) as days
+    from profiles p
+    where p.id = auth.uid()
+  ),
+  hidden as (
+    select r.rating, r.reviewed_at, a.name as app_name,
+           left(coalesce(nullif(trim(r.body), ''), r.title, ''), 40) as snippet
+    from reviews r
+    join apps a on a.id = r.app_id
+    cross join me
+    where a.owner = auth.uid()
+      and me.days is not null
+      and r.reviewed_at < now() - make_interval(days => me.days)
+  ),
+  totals as (
+    select count(*)::bigint as n, count(*) filter (where h.rating <= 2)::bigint as low
+    from hidden h
+  )
+  select t.n, t.low, s.rating, s.reviewed_at, s.app_name, s.snippet
+  from totals t
+  join lateral (
+    select * from hidden
+    order by reviewed_at desc
+    limit least(greatest(coalesce(p_limit, 3), 0), 5)
+  ) s on true;
+$$;
+
+revoke all on function public.locked_reviews_preview(int) from public, anon;
+grant execute on function public.locked_reviews_preview(int) to authenticated;
 
 -- security definer 関数はサーバー(service_role)からのみ呼ぶ。
 -- クライアントが直接RPCして枠を払い戻す等ができないよう明示的に剥奪する。

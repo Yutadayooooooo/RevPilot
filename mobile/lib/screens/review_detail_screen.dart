@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../data.dart';
+import 'apps_screen.dart';
 import 'plan_screen.dart';
 import '../models.dart';
 import '../theme.dart';
@@ -72,6 +73,22 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
       }
     } finally {
       if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  /// このレビューのアプリの返信スタイル（書き出し・結び・ルール）を編集する。
+  /// AI返信を見たその場で「毎回こう書いてほしい」を直せるようにする。
+  Future<void> _openReplyStyle() async {
+    HapticFeedback.selectionClick();
+    try {
+      final apps = await Repo.apps();
+      final app = apps.where((a) => a.id == widget.review.appId).firstOrNull;
+      if (app == null || !mounted) return;
+      await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => AppEditScreen(existing: app)),
+      );
+    } catch (e) {
+      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
     }
   }
 
@@ -247,7 +264,17 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
             ],
           ).animate(delay: 180.ms).fadeIn(duration: 240.ms).slideY(
               begin: 0.05, end: 0, curve: Curves.easeOut),
-          const SizedBox(height: 12),
+          if (AppConfig.hasApi)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _openReplyStyle,
+                icon: const Icon(Icons.tune_rounded, size: 16),
+                label: const Text('返信スタイルを設定',
+                    style: TextStyle(fontSize: 12)),
+              ),
+            ),
+          const SizedBox(height: 4),
           Row(
             children: [
               Expanded(

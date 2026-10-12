@@ -8,6 +8,11 @@ class AppRow {
   final String? description;
   final String replyTone;
 
+  /// 返信スタイル（AI返信の書き出し・結び・ルール）。未設定は null。
+  final String? replyOpening;
+  final String? replyClosing;
+  final String? replyRules;
+
   AppRow({
     required this.id,
     required this.store,
@@ -15,6 +20,9 @@ class AppRow {
     required this.name,
     this.description,
     required this.replyTone,
+    this.replyOpening,
+    this.replyClosing,
+    this.replyRules,
   });
 
   factory AppRow.fromJson(Map<String, dynamic> j) => AppRow(
@@ -24,7 +32,14 @@ class AppRow {
         name: j['name'] as String,
         description: j['description'] as String?,
         replyTone: (j['reply_tone'] as String?) ?? 'polite',
+        replyOpening: j['reply_opening'] as String?,
+        replyClosing: j['reply_closing'] as String?,
+        replyRules: j['reply_rules'] as String?,
       );
+
+  /// 返信スタイルを1つでも設定しているか。
+  bool get hasReplyStyle => [replyOpening, replyClosing, replyRules]
+      .any((s) => s != null && s.trim().isNotEmpty);
 
   String get storeLabel => store == 'appstore' ? 'App Store' : 'Google Play';
 }
@@ -171,3 +186,56 @@ const topicLabels = {
   'praise': '称賛',
   'other': 'その他',
 };
+
+/// Free の閲覧範囲（直近30日）より前にある、保存済みレビューの概要。
+/// 本文は冒頭だけが届く（全文はアップグレードで読めるようになる）。
+class LockedPreview {
+  final int hiddenTotal;
+
+  /// うち★1〜2の件数。
+  final int hiddenLow;
+  final List<LockedReview> samples;
+
+  const LockedPreview({
+    required this.hiddenTotal,
+    required this.hiddenLow,
+    required this.samples,
+  });
+
+  static const empty = LockedPreview(hiddenTotal: 0, hiddenLow: 0, samples: []);
+
+  bool get hasHidden => hiddenTotal > 0;
+
+  factory LockedPreview.fromRows(List rows) {
+    if (rows.isEmpty) return empty;
+    final first = Map<String, dynamic>.from(rows.first as Map);
+    return LockedPreview(
+      hiddenTotal: (first['hidden_total'] as num?)?.toInt() ?? 0,
+      hiddenLow: (first['hidden_low'] as num?)?.toInt() ?? 0,
+      samples: rows
+          .map((e) => LockedReview.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
+  }
+}
+
+class LockedReview {
+  final int rating;
+  final DateTime? reviewedAt;
+  final String appName;
+  final String snippet;
+
+  const LockedReview({
+    required this.rating,
+    required this.reviewedAt,
+    required this.appName,
+    required this.snippet,
+  });
+
+  factory LockedReview.fromJson(Map<String, dynamic> j) => LockedReview(
+        rating: (j['rating'] as num?)?.toInt() ?? 0,
+        reviewedAt: _dt(j['reviewed_at']),
+        appName: (j['app_name'] as String?) ?? '',
+        snippet: (j['snippet'] as String?) ?? '',
+      );
+}

@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   const { data: review, error } = await db
     .from("reviews")
-    .select("id, store, external_id, rating, title, body, territory, apps!inner(name, description, store_app_id, reply_tone)")
+    .select("id, store, external_id, rating, title, body, territory, apps!inner(*)")
     .eq("id", reviewId)
     .single();
   if (error || !review) return NextResponse.json({ error: "review not found" }, { status: 404 });
@@ -54,7 +54,8 @@ export async function POST(req: NextRequest) {
         { rating: review!.rating, title: review!.title, body: review!.body, territory: review!.territory },
         app.name,
         app.description,
-        app.reply_tone
+        app.reply_tone,
+        { opening: app.reply_opening, closing: app.reply_closing, rules: app.reply_rules }
       );
     } catch (e) {
       await refundAiUnits(user.id, AI_UNITS.reply); // 生成できなかったぶんは枠を返す
