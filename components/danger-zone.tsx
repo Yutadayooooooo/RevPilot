@@ -44,7 +44,7 @@ export function DangerZone() {
         <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
           App Store のアプリ内課金でご契約中の場合は、Appleのサブスクリプションも
-          「設定 &gt; Apple ID &gt; サブスクリプション」から解約してください。
+          「設定 &gt; 一番上のお名前 &gt; サブスクリプション」から解約してください。
         </p>
 
         {!open ? (

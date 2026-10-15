@@ -33,6 +33,19 @@ const CLASSIFY_CONCURRENCY = 4;
 const NOTIFY_LIMIT = 5;
 
 /**
+ * アプリを追加した時刻より、これ以上前に書かれたレビューは「新着」として通知しない。
+ *
+ * 初回の取り込みでは過去のレビューがまとめて入る（App Store は最大1,000件）。
+ * これを通知すると「新しいレビューが100件・最低評価★1」のように、
+ * 低評価が急に来たように見えてしまう。直前の分（追加の少し前に付いた★1など）は
+ * 知らせたいので、追加時刻ちょうどではなく少し前までを新着として扱う。
+ *
+ * 「last_polled_at が空なら通知しない」では足りない。markPolled は失敗時にも
+ * last_polled_at を入れるので、初回が失敗すると次の（実質初回の）取り込みで通知が出てしまう。
+ */
+const NOTIFY_BACKLOG_GRACE_MS = 24 * 3_600_000;
+
+/**
  * 1リクエストで分類にかけるレビュー数の上限。
  *
  * Cloudflare Workers の無料プランは「1リクエストあたり外部サブリクエスト50回」。
@@ -79,14 +92,21 @@ export async function listDueAppIds(): Promise<string[]> {
 
 /**
  * アプリ1本だけを巡回する。cron から1リクエスト＝1アプリで呼ばれる。
+ * アプリ追加の直後の初回取得（app/api/apps）でも使う。
  * 存在しないIDは「対象0件」として静かに成功させる（削除との競合で落とさない）。
+ *
+ * @param opts.skipAi トピック分類をしない。追加の直後は追加処理ぶんの外部呼び出しを
+ *   すでに使っているので、分類まで回すと1リクエスト50回の上限を超えうる。
  */
-export async function pollOneApp(appId: string): Promise<PollResult> {
+export async function pollOneApp(
+  appId: string,
+  opts: { skipAi?: boolean } = {}
+): Promise<PollResult> {
   const db = serviceClient();
   const { data: app, error } = await db.from("apps").select(APP_SELECT).eq("id", appId).maybeSingle();
   if (error) throw error;
   if (!app) return { inserted: 0, apps: 0, skipped: 0, failed: 0, errors: [] };
-  return pollApps(db, [app], { budgetMs: 60_000 });
+  return pollApps(db, [app], { budgetMs: 60_000, skipAi: opts.skipAi });
 }
 
 /** 巡回対象の抽出（pollAllApps と listDueAppIds の共通部分）。 */
@@ -175,8 +195,70 @@ export interface PollResult {
   skipped: number;
   /** ストアAPIの呼び出しに失敗したアプリ数（資格情報の失効など） */
   failed: number;
-  /** 失敗の内訳（運営向け。ユーザーには apps.last_error として見える） */
-  errors: { appId: string; message: string }[];
+  /**
+   * 失敗の内訳。message は利用者向けの短い日本語（storeErrorMessage）で、
+   * apps.last_error と同じ文面。ストアの生の応答はログ（console.error）にだけ残す。
+   */
+  errors: PollFailure[];
+}
+
+export interface PollFailure {
+  appId: string;
+  appName: string | null;
+  message: string;
+}
+
+const JAPANESE = /[\u3040-\u30ff\u3400-\u9fff]/;
+
+/**
+ * ストアAPIの失敗を、利用者向けの短い日本語にする（apps.last_error・/api/poll・アプリ追加で共通）。
+ *
+ * lib/appstore.ts / lib/googleplay.ts は 'ASC 403: {"errors":[...]}' のような生の応答を
+ * そのまま投げることがあり、以前はそれが画面にまで出ていた。
+ * lib 側が日本語の案内（「認証情報が未登録です」など）を投げている場合はそれを使う。
+ */
+export function storeErrorMessage(store: string, e: unknown): string {
+  const raw = String((e as any)?.message ?? e ?? "").trim();
+  const status = Number(raw.match(/^(?:ASC|GooglePlay)(?: reply)?\s+(\d{3})\b/)?.[1] ?? 0);
+  const apple = store === "appstore";
+  const label = apple ? "App Store Connect" : "Google Play";
+
+  // Google は回数制限を 403 で返すことがあるので、権限より先に見る。
+  if (status === 429 || /rate ?limit|too many requests|quota|resource_exhausted/i.test(raw)) {
+    return `${label} の利用回数の上限に達しました。しばらくしてから再度お試しください。`;
+  }
+  if (status === 401) {
+    return apple
+      ? "App Store Connect の鍵が無効です。取り消されていないかご確認のうえ、ストア連携で登録し直してください。"
+      : "Google Play のサービスアカウントで認証できませんでした。ストア連携をご確認ください。";
+  }
+  if (status === 403) {
+    return apple
+      ? "この鍵にはレビューを読む権限がありません。App Store Connect で鍵のアクセス権（App Manager 以上）をご確認ください。"
+      : "サービスアカウントにレビューを読む権限がありません。Play Console の「ユーザーと権限」をご確認ください。";
+  }
+  if (status === 404) {
+    return apple
+      ? "App Store Connect にこのアプリが見つかりません。Apple ID（数字）をご確認ください。"
+      : "Google Play にこのアプリが見つかりません。パッケージ名をご確認ください。";
+  }
+  if (status >= 500) {
+    return `${label} が一時的に応答していません。時間をおいて再度お試しください。`;
+  }
+  // lib 側が用意した日本語の案内はそのまま使う（長すぎるものだけ切る）。
+  if (JAPANESE.test(raw)) return raw.length > 120 ? `${raw.slice(0, 120)}…` : raw;
+  // google-auth-library の失敗（鍵の削除・無効化など）。
+  if (!apple && /invalid_grant|invalid_client|unauthorized_client|DECODER|PEM|private key|JWT/i.test(raw)) {
+    return "Google Play のサービスアカウントで認証できませんでした。JSONキーが削除・無効化されていないかご確認ください。";
+  }
+  // jsonwebtoken が .p8 を読めない（壊れた鍵が保存されている）。
+  if (apple && /secretOrPrivateKey|asymmetric key|DECODER|PEM|private key/i.test(raw)) {
+    return "App Store Connect の鍵（.p8）を読み込めませんでした。ストア連携で登録し直してください。";
+  }
+  if (/fetch failed|network|timed? ?out|abort|econn|enotfound|eai_again|socket/i.test(raw)) {
+    return `${label} に接続できませんでした。時間をおいて再度お試しください。`;
+  }
+  return `${label} でエラーが発生しました。時間をおいて再度お試しください。`;
 }
 
 /**
@@ -211,11 +293,11 @@ async function markPolled(
 async function pollApps(
   db: ReturnType<typeof serviceClient>,
   apps: any[],
-  opts: { budgetMs?: number } = {}
+  opts: { budgetMs?: number; skipAi?: boolean } = {}
 ): Promise<PollResult> {
   const deadline = opts.budgetMs ? Date.now() + opts.budgetMs : null;
   let inserted = 0;
-  const errors: { appId: string; message: string }[] = [];
+  const errors: PollFailure[] = [];
 
   // 同一オーナーの認証情報は使い回す。解決前のPromiseをキャッシュすることで、
   // 並行実行でも同じ認証情報を二重に読まない。
@@ -255,20 +337,25 @@ async function pollApps(
         reviews = await fetchGooglePlayReviews(app.store_app_id, 100, creds);
       }
     } catch (e: any) {
-      const message = String(e?.message ?? e);
+      // 生の応答（英語のJSON）はログにだけ残し、画面に出る last_error は短い日本語にする。
+      const message = storeErrorMessage(app.store, e);
       console.error(`poll failed app=${app.id}`, e);
-      errors.push({ appId: app.id, message });
+      errors.push({ appId: app.id, appName: app.name ?? null, message });
       await markPolled(db, app.id, message); // 失敗も記録して画面に出す
       return; // 1アプリの失敗で全体を止めない
     }
 
     try {
-      inserted += await ingestReviews(db, app, reviews);
+      inserted += await ingestReviews(db, app, reviews, { skipAi: opts.skipAi });
       await markPolled(db, app.id, null);
     } catch (e: any) {
-      const message = String(e?.message ?? e);
+      // ingestReviews は日本語の案内を投げる。それ以外（想定外の例外）は英語なので出さない。
+      const raw = String(e?.message ?? e);
+      const message = JAPANESE.test(raw)
+        ? raw
+        : "レビューの取り込みに失敗しました。時間をおいて再度お試しください。";
       console.error(`ingest failed app=${app.id}`, e);
-      errors.push({ appId: app.id, message });
+      errors.push({ appId: app.id, appName: app.name ?? null, message });
       await markPolled(db, app.id, message);
     }
   };
@@ -292,7 +379,7 @@ async function pollApps(
  */
 export async function ingestReviews(
   db: ReturnType<typeof serviceClient>,
-  app: { id: string; name: string; owner?: string; profiles?: any },
+  app: { id: string; name: string; owner?: string; created_at?: string | null; profiles?: any },
   reviews: NormalizedReview[],
   opts: { skipAi?: boolean } = {}
 ): Promise<number> {
@@ -306,19 +393,33 @@ export async function ingestReviews(
   const { data: upserted, error: upErr } = await db
     .from("reviews")
     .upsert(rows, { onConflict: "app_id,store,external_id", ignoreDuplicates: true })
-    .select("id, rating, body, title, external_id");
+    .select("id, rating, body, title, external_id, reviewed_at");
   if (upErr) {
+    // DBの英語のエラーは画面（apps.last_error）に出さない。
     console.error(upErr);
-    throw new Error(`レビューの保存に失敗しました: ${upErr.message}`);
+    throw new Error("レビューの保存に失敗しました。時間をおいて再度お試しください。");
   }
 
   const fresh = upserted ?? [];
 
+  // 通知するのは、アプリを追加した少し前以降に書かれたレビューだけ（初回の過去分は知らせない）。
+  // 日時が分からないものは新着として扱う（漏らすより知らせるほうを選ぶ）。
+  const addedAt = app.created_at ? Date.parse(app.created_at) : NaN;
+  const recent = Number.isNaN(addedAt)
+    ? fresh
+    : fresh.filter((r: any) => {
+        const at = r.reviewed_at ? Date.parse(r.reviewed_at) : NaN;
+        return Number.isNaN(at) || at >= addedAt - NOTIFY_BACKLOG_GRACE_MS;
+      });
+
   // 新規レビューを通知する。低評価を優先し、件数を絞って送る。
   // 逐次awaitだと100件の新着で通知だけに時間予算を使い切るので並列で投げる。
+  // メールもプッシュと同じ通知対象の設定（すべて / ★1〜2のみ / 送らない）に従う。
+  // Webhook は利用者が自分で設定した送り先なので、設定に関わらず送る。
   const webhook = app.profiles?.notify_webhook_url ?? null;
   const email = app.profiles?.email ?? null;
-  const notifyTargets = [...fresh].sort((a, b) => a.rating - b.rating).slice(0, NOTIFY_LIMIT);
+  const scope = app.profiles?.push_scope ?? "all";
+  const notifyTargets = [...recent].sort((a, b) => a.rating - b.rating).slice(0, NOTIFY_LIMIT);
   await Promise.allSettled([
     ...notifyTargets.map((row) =>
       notifyNewReview({
@@ -326,10 +427,10 @@ export async function ingestReviews(
         rating: row.rating,
         body: row.body,
         webhookUrl: webhook,
-        email,
+        email: pushScopeAllows(scope, row.rating) ? email : null,
       })
     ),
-    pushNewReviews(app, fresh),
+    pushNewReviews(app, recent),
   ]);
 
   // 新規レビューをAIでトピック分類 → review_topics に保存（分析画面の要望ランキング用）。
@@ -357,10 +458,13 @@ export async function ingestReviews(
  *
  * 通知対象（すべて / ★1〜2のみ / 送らない）は端末の設定を profiles.push_scope に
  * 同期してあるので、サーバー側でもそれに従う。
+ *
+ * 1件のときは review_id も付ける（アプリはタップでそのレビューの詳細を開く）。
+ * 複数件のときは app_id だけ（アプリはそのアプリの未返信の一覧を開く）。
  */
 async function pushNewReviews(
   app: any,
-  fresh: { rating: number; body: string | null; title: string | null }[]
+  fresh: { id: string | number; rating: number; body: string | null; title: string | null }[]
 ): Promise<void> {
   if (!pushConfigured() || !app.owner || fresh.length === 0) return;
 
@@ -373,8 +477,10 @@ async function pushNewReviews(
 
   let title: string;
   let body: string;
+  const data: Record<string, string> = { type: "reviews", app_id: String(app.id) };
   if (targets.length === 1) {
     const r = targets[0];
+    data.review_id = String(r.id);
     const text = (r.body?.trim() || r.title?.trim() || "(本文なし)").slice(0, 160);
     title = `新しいレビュー ★${r.rating}${appName}`;
     body = `${storeLabel}｜${text}`;
@@ -388,7 +494,7 @@ async function pushNewReviews(
     await sendPushToUser(app.owner, {
       title,
       body,
-      data: { type: "reviews", app_id: String(app.id) },
+      data,
     });
   } catch (e) {
     // pushが落ちても取り込みは止めない（メール/Webhookには届いている）。

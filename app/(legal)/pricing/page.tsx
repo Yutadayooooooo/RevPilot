@@ -74,7 +74,7 @@ export default function PricingPage() {
       <h2 className="mb-3 mt-12 text-lg font-bold text-slate-900">よくある質問</h2>
       <dl className="space-y-5">
         <Faq q="解約はどうすればいいですか？">
-          iOS は iPhone の「設定 &gt; Apple ID &gt; サブスクリプション」から、
+          iOS は iPhone の「設定 &gt; 一番上のお名前 &gt; サブスクリプション」から、
           Android は Google Play ストアの「お支払いと定期購入 &gt; 定期購入」から、いつでも解約できます
           （アプリ内の「設定 &gt; プラン」からもこの画面を開けます）。
           解約後も、その課金期間の終了までは有料機能をご利用いただけます。
@@ -116,7 +116,6 @@ export default function PricingPage() {
         </Faq>
         <Faq q="通知はどのように届きますか？">
           アプリを開いていなくても端末にプッシュ通知が届きます（通知を許可した場合）。
-          メールと、設定した Slack / Discord の Webhook にも配信できます。
           通知の対象は「すべて」と「★1〜2のみ」から選べます。
           なおレビューの取得は毎時のため、届くまで最大1時間ほどかかります。
         </Faq>
@@ -125,7 +124,7 @@ export default function PricingPage() {
         </Faq>
       </dl>
 
-      <LegalFooter updated="2026年10月11日" />
+      <LegalFooter updated="2026年10月15日" />
     </>
   );
 }

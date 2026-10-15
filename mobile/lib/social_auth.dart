@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -10,6 +11,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
+import 'ui.dart';
 
 /// Apple / Google でのログイン。
 ///
@@ -118,11 +120,26 @@ class SocialAuth {
   }
 
   /// 例外を利用者向けの文言にする。null はキャンセル（表示しない）。
+  ///
+  /// Supabase の英語の文面（"Invalid login credentials" など）や、
+  /// 通信の失敗（ClientException …）をそのまま出さない。
   static String? messageFor(Object e) {
     if (e == cancelled) return null;
-    if (e is AuthException) return e.message;
-    if (e is PlatformException) return 'ログインできませんでした（${e.code}）';
-    if (e is String) return e;
+    if (e is String) return e; // 自前の日本語の案内
+    if (e is SignInWithAppleAuthorizationException) {
+      // キャンセル以外は、端末で Apple アカウントにサインインしていないことが多い。
+      return 'Appleでサインインできませんでした。端末の設定で Apple アカウントにサインインしているかご確認ください。';
+    }
+    if (e is AuthException ||
+        e is SocketException ||
+        e is TimeoutException ||
+        e is http.ClientException) {
+      return friendlyError(e);
+    }
+    if (e is PlatformException &&
+        '${e.code} ${e.message}'.toLowerCase().contains('network')) {
+      return friendlyError(e);
+    }
     return 'ログインできませんでした。時間をおいて再度お試しください。';
   }
 }

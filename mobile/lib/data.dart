@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app_events.dart';
 import 'config.dart';
 import 'models.dart';
 import 'plan_catalog.g.dart';
@@ -23,28 +24,32 @@ class Repo {
     String path,
     Map<String, dynamic> body, {
     Duration timeout = const Duration(seconds: 30),
+  }) =>
+      _request('POST', path, body: body, timeout: timeout);
+
+  static const _offlineMessage =
+      'サーバーに接続できませんでした。通信環境をご確認のうえ、時間をおいて再度お試しください。';
+  static const _expiredMessage = 'ログインの有効期限が切れました。もう一度ログインしてください。';
+
+  /// API を呼ぶ共通処理。
+  ///
+  /// アクセストークンは期限切れなら先に更新し、それでも 401 なら一度だけ更新して送り直す
+  /// （長くバックグラウンドにしていた直後は、自動更新より先に送ってしまうことがある）。
+  /// サーバーは認証を最初に確認するので、送り直しても処理が二重になることはない。
+  static Future<Map<String, dynamic>> _request(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Duration timeout = const Duration(seconds: 30),
+    String? fallbackError,
   }) async {
     if (!AppConfig.hasApi) {
       throw const ApiException('この機能はご利用いただけません。時間をおいて再度お試しください。');
     }
-    final token = _db.auth.currentSession?.accessToken;
-    if (token == null) throw const ApiException('ログインが必要です。');
-    final http.Response res;
-    try {
-      res = await http
-          .post(
-            Uri.parse('${AppConfig.apiBaseUrl}$path'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode(body),
-          )
-          .timeout(timeout);
-    } catch (_) {
-      // 接続失敗/タイムアウトは生の ClientException を出さず、利用者向けの文言に。
-      throw const ApiException(
-          'サーバーに接続できませんでした。通信環境をご確認のうえ、時間をおいて再度お試しください。');
+    var res = await _send(method, path, await _accessToken(), body, timeout);
+    if (res.statusCode == 401) {
+      res = await _send(
+          method, path, await _accessToken(refresh: true), body, timeout);
     }
     Map<String, dynamic> json = {};
     try {
@@ -52,8 +57,81 @@ class Repo {
     } catch (_) {}
     if (res.statusCode >= 200 && res.statusCode < 300) return json;
     throw ApiException(
-        (json['error'] as String?) ?? 'エラーが発生しました (${res.statusCode})',
+        _serverMessage(json['error'] as String?, res.statusCode, fallbackError),
         statusCode: res.statusCode);
+  }
+
+  static Future<http.Response> _send(
+    String method,
+    String path,
+    String token,
+    Map<String, dynamic>? body,
+    Duration timeout,
+  ) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}$path');
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+    final encoded = body == null ? null : jsonEncode(body);
+    try {
+      return await switch (method) {
+        'GET' => http.get(uri, headers: headers),
+        'DELETE' => http.delete(uri, headers: headers, body: encoded),
+        _ => http.post(uri, headers: headers, body: encoded),
+      }
+          .timeout(timeout);
+    } catch (_) {
+      // 接続失敗/タイムアウトは生の ClientException を出さず、利用者向けの文言に。
+      throw const ApiException(_offlineMessage);
+    }
+  }
+
+  /// 送信に使うアクセストークン。期限切れ（間近）なら先に更新する。
+  static Future<String> _accessToken({bool refresh = false}) async {
+    final auth = _db.auth;
+    final session = auth.currentSession;
+    if (session == null) throw const ApiException('ログインが必要です。', statusCode: 401);
+    if (!refresh && !session.isExpired) return session.accessToken;
+    try {
+      final res = await auth.refreshSession();
+      return res.session?.accessToken ?? session.accessToken;
+    } on AuthRetryableFetchException {
+      // 電波が悪いだけ。ログアウトはさせずに通信エラーとして伝える。
+      throw const ApiException(_offlineMessage);
+    } on AuthException {
+      // 更新トークンが無効＝ログインし直すしかない（gotrue がログアウトを通知する）。
+      throw const ApiException(_expiredMessage, statusCode: 401);
+    }
+  }
+
+  /// サーバーの error 文を利用者向けにそろえる。
+  /// 日本語の案内はそのまま使い、英語（"unauthorized" や Supabase の生のエラー）は
+  /// 状態コードに応じた日本語に置き換える。
+  static String _serverMessage(String? raw, int status, String? fallback) {
+    final text = (raw ?? '').trim();
+    if (looksJapanese(text)) {
+      // 日本語の案内の末尾に、ストアの生の応答（'ASC 403: {...}' など）が
+      // 「（…）」で付くことがある。理由が分かれば短い日本語に、分からなければ外す。
+      return text.replaceFirstMapped(RegExp(r'（([^（）]*)）\s*$'), (m) {
+        final inner = m.group(1)!;
+        // 日本語や番号だけ（「（500）」など）はそのままでよい。
+        if (looksJapanese(inner) || !RegExp(r'[A-Za-z]').hasMatch(inner)) {
+          return m.group(0)!;
+        }
+        final reason = storeErrorReason(inner);
+        return reason == null ? '' : '（$reason）';
+      });
+    }
+    if (fallback != null) return fallback;
+    return switch (status) {
+      401 => _expiredMessage,
+      403 => 'この操作を行う権限がありません。',
+      404 => '対象が見つかりませんでした。画面を更新してから再度お試しください。',
+      429 => 'リクエストが多すぎます。少し時間をおいて再度お試しください。',
+      >= 500 => 'サーバーでエラーが発生しました。時間をおいて再度お試しください。',
+      _ => 'エラーが発生しました。時間をおいて再度お試しください。',
+    };
   }
 
   // ---- アプリ（直接Supabase / RLSで自分のみ） ----
@@ -68,7 +146,11 @@ class Repo {
   }
 
   /// アプリを追加。プラン別のアプリ数上限をクライアント側でも確認する。
-  static Future<AppRow> addApp({
+  ///
+  /// サーバーは追加の直後に、そのアプリの最初の取得まで行う（結果は [AddAppResult]）。
+  /// 続けて [refreshFromStores] を呼ぶと「新しいレビューはありませんでした」になるので呼ばない。
+  /// [name] は App Store なら空でよい（ストアに登録されている名前が使われる）。
+  static Future<AddAppResult> addApp({
     required String store,
     required String storeAppId,
     required String name,
@@ -94,9 +176,13 @@ class Repo {
         'reply_closing': replyClosing,
         'reply_rules': replyRules,
       },
-      timeout: const Duration(seconds: 45), // ストアへの疎通確認を含む
+      timeout: const Duration(seconds: 45), // ストアへの疎通確認と最初の取得（最大15秒）を含む
     );
-    return AppRow.fromJson(Map<String, dynamic>.from(json['app'] as Map));
+    final result = AddAppResult.fromJson(json);
+    AppEvents.notifyDataChanged(DataChange.apps);
+    // 最初の取得でレビューが入った：一覧・通知・分析も読み直させる。
+    if (result.inserted > 0) AppEvents.notifyDataChanged(DataChange.reviews);
+    return result;
   }
 
   /// アプリの編集。[style] は変更した欄だけを渡す（null の値は「空にする」）。
@@ -115,62 +201,173 @@ class Repo {
       'reply_tone': tone,
       ...style,
     }).eq('id', id);
+    AppEvents.notifyDataChanged(DataChange.apps);
   }
 
   static Future<void> deleteApp(String id) async {
     await _db.from('apps').delete().eq('id', id);
+    AppEvents.notifyDataChanged(DataChange.apps);
   }
 
   // ---- レビュー ----
-  /// レビュー一覧。星（複数可）・アプリ・ストア・未返信フィルタと並び替えに対応。
+  /// 一覧・詳細で使う列（返信の履歴とトピックを含む）。
+  static const _reviewSelect =
+      '*, apps!inner(name), replies(*), review_topics(topic)';
+
+  /// レビュー一覧。星（複数可）・アプリ・ストア・未返信フィルタ・キーワードと並び替えに対応。
+  /// 続きを読むときは [offset] を進める（[reviewsPage] の nextOffset を使うと確実）。
   static Future<List<ReviewRow>> reviews({
     String? appId,
     String? store,
     List<int>? ratings,
     bool unrepliedOnly = false,
+    String? keyword,
     ReviewSort sort = ReviewSort.newest,
-  }) async {
-    var query = _db.from('reviews').select(
-        '*, apps!inner(name), replies(*), review_topics(topic)');
+    int offset = 0,
+    int limit = 200,
+  }) async =>
+      (await reviewsPage(
+        appId: appId,
+        store: store,
+        ratings: ratings,
+        unrepliedOnly: unrepliedOnly,
+        keyword: keyword,
+        sort: sort,
+        offset: offset,
+        limit: limit,
+      ))
+          .items;
 
-    if (appId != null) query = query.eq('app_id', appId);
-    if (store != null) query = query.eq('store', store);
-    if (ratings != null && ratings.isNotEmpty) {
-      query = query.inFilter('rating', ratings);
+  /// レビュー一覧の1ページ。[reviews] と同じ条件で、続きがあるかと次の offset も返す。
+  ///
+  /// 「未返信のみ」はサーバー側で絞る。以前は新しい200件を取ってから端末で絞っていたため、
+  /// 201件目より古い未返信が「未返信のみ」にしても一切出なかった。
+  static Future<ReviewPage> reviewsPage({
+    String? appId,
+    String? store,
+    List<int>? ratings,
+    bool unrepliedOnly = false,
+    String? keyword,
+    ReviewSort sort = ReviewSort.newest,
+    int offset = 0,
+    int limit = 50,
+  }) async {
+    Future<List<Map<String, dynamic>>> fetch({required bool serverUnreplied}) {
+      // 未返信の絞り込みは、返信済み（posted / copied）の行だけを別名 done で埋め込み、
+      // それが空のレビューだけを残す（PostgREST の anti-join）。
+      var query = _db.from('reviews').select(
+          serverUnreplied ? '$_reviewSelect, done:replies(id)' : _reviewSelect);
+      if (appId != null) query = query.eq('app_id', appId);
+      if (store != null) query = query.eq('store', store);
+      if (ratings != null && ratings.isNotEmpty) {
+        query = query.inFilter('rating', ratings);
+      }
+      final q = keyword?.trim() ?? '';
+      if (q.isNotEmpty) {
+        final v = _ilikeValue(q);
+        query = query.or('title.ilike.$v,body.ilike.$v');
+      }
+      if (serverUnreplied) {
+        query = query
+            .inFilter('done.status', ['posted', 'copied'])
+            .isFilter('done', null);
+      }
+      final ordered = switch (sort) {
+        ReviewSort.newest => query.order('reviewed_at', ascending: false),
+        ReviewSort.oldest => query.order('reviewed_at', ascending: true),
+        ReviewSort.highest => query
+            .order('rating', ascending: false)
+            .order('reviewed_at', ascending: false),
+        ReviewSort.lowest => query
+            .order('rating', ascending: true)
+            .order('reviewed_at', ascending: false),
+      };
+      // 同じ日時のレビューがページの境目で重複・欠落しないよう、最後に id でも並べる。
+      return ordered.order('id', ascending: true).range(offset, offset + limit - 1);
     }
 
-    final ordered = switch (sort) {
-      ReviewSort.newest => query.order('reviewed_at', ascending: false),
-      ReviewSort.oldest => query.order('reviewed_at', ascending: true),
-      ReviewSort.highest => query
-          .order('rating', ascending: false)
-          .order('reviewed_at', ascending: false),
-      ReviewSort.lowest => query
-          .order('rating', ascending: true)
-          .order('reviewed_at', ascending: false),
-    };
+    List<Map<String, dynamic>> rows;
+    var filtered = false;
+    if (unrepliedOnly) {
+      try {
+        rows = await fetch(serverUnreplied: true);
+        filtered = true;
+      } on PostgrestException {
+        // 埋め込みへの null 絞り込みに対応していない古い PostgREST 向け。
+        // 従来どおり取得後に端末で絞る（このときは古い未返信が漏れうる）。
+        rows = await fetch(serverUnreplied: false);
+      }
+    } else {
+      rows = await fetch(serverUnreplied: false);
+    }
+    var items = rows.map(ReviewRow.fromJson).toList();
+    // サーバーで絞れなかった場合は端末で絞る（判定は needsReply にそろえる）。
+    if (unrepliedOnly && !filtered) {
+      items = items.where((r) => r.needsReply).toList();
+    }
+    return ReviewPage(
+      items: items,
+      hasMore: rows.length >= limit,
+      nextOffset: offset + rows.length,
+    );
+  }
 
-    final rows = await ordered.limit(200);
-    var listOut = (rows as List)
-        .map((e) => ReviewRow.fromJson(Map<String, dynamic>.from(e)))
-        .toList();
-    // 「未返信」は「ストアに投稿していない」で判定する（下書きだけの状態も対象に残す）。
-    if (unrepliedOnly) listOut = listOut.where((r) => r.needsReply).toList();
-    return listOut;
+  /// レビュー1件を一覧と同じ列（返信の履歴・トピック込み）で取り直す。
+  /// 通知から詳細を開くときなど、軽量な行しか手元にない場合に使う。見つからなければ null。
+  static Future<ReviewRow?> reviewById(String id) async {
+    final row = await _db
+        .from('reviews')
+        .select(_reviewSelect)
+        .eq('id', id)
+        .maybeSingle();
+    return row == null ? null : ReviewRow.fromJson(row);
+  }
+
+  /// キーワード検索の値を PostgREST の or= に埋め込める形にする。
+  /// LIKE の記号（% _ \）は文字として扱い、区切りになる , ( ) を含んでも壊れないよう
+  /// 値全体を "" で囲む（"" の中では \ と " を \ でエスケープする）。
+  static String _ilikeValue(String keyword) {
+    final like = keyword.replaceAllMapped(RegExp(r'[\\%_]'), (m) => '\\${m[0]}');
+    final quoted = '%$like%'.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+    return '"$quoted"';
   }
 
   /// 分析タブの集計。DB 側で全件を集計する（端末で200件だけ平均すると数字がずれるため）。
   /// 集計関数が未作成のDBでは、従来どおり一覧から計算する。
   static Future<ReviewSummary> reviewSummary({String? appId, String? store}) async {
     try {
+      final unrepliedFuture = unrepliedCount(appId: appId, store: store);
       final rows = await _db.rpc('my_review_summary',
           params: {'p_app': appId, 'p_store': store});
       final list = rows as List;
       if (list.isNotEmpty) {
-        return ReviewSummary.fromJson(Map<String, dynamic>.from(list.first as Map));
+        final summary =
+            ReviewSummary.fromJson(Map<String, dynamic>.from(list.first as Map));
+        // 集計関数の「未返信」は返信の行が1つも無いもので、下書きだけでも返信済みに
+        // 数えてしまう。一覧の「未返信のみ」と同じ定義（posted / copied が無い）の件数で上書きする。
+        final unreplied = await unrepliedFuture;
+        return unreplied == null ? summary : summary.withUnreplied(unreplied);
       }
     } catch (_) {}
     return ReviewSummary.fromReviews(await reviews(appId: appId, store: store));
+  }
+
+  /// 未返信（posted / copied の返信が無い）レビューの件数。一覧の「未返信のみ」と同じ定義。
+  /// 数えられない環境（古い PostgREST など）では null。
+  static Future<int?> unrepliedCount({String? appId, String? store}) async {
+    try {
+      var query = _db.from('reviews').select('id, done:replies(id)');
+      if (appId != null) query = query.eq('app_id', appId);
+      if (store != null) query = query.eq('store', store);
+      final res = await query
+          .inFilter('done.status', ['posted', 'copied'])
+          .isFilter('done', null)
+          .limit(1)
+          .count(CountOption.exact);
+      return res.count;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 通知の判定・バナー表示に使う軽量なレビュー取得。
@@ -183,9 +380,12 @@ class Repo {
     List<int>? ratings,
     int limit = 50,
   }) async {
-    var query = _db
-        .from('reviews')
-        .select('id, store, rating, title, body, reviewed_at, apps!inner(name)');
+    // app_id は ReviewRow に必須なので必ず含める（欠けると全件の読み込みが失敗し、
+    // 通知タブが常に空・未読バッジが常に0になっていた）。
+    // replies は返信済みの判定に使う最小限の列だけ（ReplyRow は id が必須）。
+    var query = _db.from('reviews').select(
+        'id, app_id, store, rating, title, body, reviewed_at, apps!inner(name), '
+        'replies(id, status, created_at)');
     if (ratings != null && ratings.isNotEmpty) {
       query = query.inFilter('rating', ratings);
     }
@@ -231,21 +431,29 @@ class Repo {
       {'reviewId': reviewId, 'action': 'draft'},
       timeout: const Duration(seconds: 60), // AI生成は数秒〜十数秒かかる
     );
+    AppEvents.notifyDataChanged(DataChange.replies);
     final reply = json['reply'];
     return reply is Map ? (reply['body'] as String? ?? '') : '';
   }
 
   /// ストアへ返信を投稿（API）。textを渡すとその本文を投稿する。
+  /// 投稿に失敗した場合（502）も、サーバーは本文を下書きとして保存している。
   static Future<void> postReplyToStore(String reviewId, {String? text}) async {
-    await _postApi(
-      '/api/reply',
-      {
-        'reviewId': reviewId,
-        'action': 'post',
-        if (text != null && text.trim().isNotEmpty) 'text': text,
-      },
-      timeout: const Duration(seconds: 60),
-    );
+    try {
+      await _postApi(
+        '/api/reply',
+        {
+          'reviewId': reviewId,
+          'action': 'post',
+          if (text != null && text.trim().isNotEmpty) 'text': text,
+        },
+        timeout: const Duration(seconds: 60),
+      );
+    } on ApiException catch (e) {
+      if (e.statusCode == 502) AppEvents.notifyDataChanged(DataChange.replies);
+      rethrow;
+    }
+    AppEvents.notifyDataChanged(DataChange.replies);
   }
 
   /// 複数レビューへ一括でAI返信を生成（post=trueで投稿まで）。
@@ -256,15 +464,18 @@ class Repo {
   static Future<Map<String, dynamic>> bulkReply(
     List<String> reviewIds, {
     bool post = false,
-  }) =>
-      _postApi(
-        '/api/reply/bulk',
-        {
-          'reviewIds': reviewIds,
-          'action': post ? 'post' : 'draft',
-        },
-        timeout: const Duration(seconds: 320),
-      );
+  }) async {
+    final json = await _postApi(
+      '/api/reply/bulk',
+      {
+        'reviewIds': reviewIds,
+        'action': post ? 'post' : 'draft',
+      },
+      timeout: const Duration(seconds: 320),
+    );
+    AppEvents.notifyDataChanged(DataChange.replies);
+    return json;
+  }
 
   /// レビューへの返信ドラフトを保存（直接Supabase）。
   static Future<ReplyRow> saveManualReply(String reviewId, String body) async {
@@ -278,36 +489,92 @@ class Repo {
         })
         .select()
         .single();
+    AppEvents.notifyDataChanged(DataChange.replies);
+    return ReplyRow.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  /// ストアの管理画面（App Store Connect など）で直接返信したことを記録する（直接Supabase）。
+  ///
+  /// status 'copied' の行を追加する。これで未返信の一覧・一括返信の対象から外れ、
+  /// 手動で入れた返信がAIの文面で上書きされることを防ぐ。
+  /// replies は追記だけのテーブルなので、取り消すには新しい下書きを保存する
+  /// （hasNewerDraft が true になる）か、ストアに投稿し直す。
+  /// [body] には貼り付けた本文を渡す（分からなければ空でよい）。
+  static Future<ReplyRow> markReplied(String reviewId, {String body = ''}) async {
+    final row = await _db
+        .from('replies')
+        .insert({
+          'review_id': reviewId,
+          'body': body,
+          'status': 'copied',
+          'source': 'manual',
+          'posted_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .select()
+        .single();
+    AppEvents.notifyDataChanged(DataChange.replies);
     return ReplyRow.fromJson(Map<String, dynamic>.from(row));
   }
 
   // ---- ストアから取得（手動更新 / API） ----
   static bool get canRefresh => AppConfig.hasApi;
 
-  /// ストアAPIから新着レビューを取り込む。取り込み件数などのマップを返す。
-  static Future<Map<String, dynamic>> refreshFromStores() =>
-      _postApi('/api/poll', {}, timeout: const Duration(seconds: 90));
+  /// ストアAPIから新着レビューを取り込む。
+  ///
+  /// サーバーは一部のアプリで失敗しても 200 を返すので、結果は必ず [PollOutcome] で見る
+  /// （failed / errors を見ずに「取得しました」と出すと、連携が切れていても気づけない）。
+  /// 1分に2回を超えると ApiException（429）になる。
+  static Future<PollOutcome> refreshFromStores() async {
+    final json =
+        await _postApi('/api/poll', {}, timeout: const Duration(seconds: 90));
+    var outcome = PollOutcome.fromJson(json);
+    // サーバーがアプリ名を返さない場合は、手元のアプリ一覧から補う。
+    if (outcome.errors.any((e) => e.appName == null && e.appId != null)) {
+      try {
+        final names = {for (final a in await apps()) a.id: a.name};
+        outcome = PollOutcome(
+          inserted: outcome.inserted,
+          apps: outcome.apps,
+          skipped: outcome.skipped,
+          failed: outcome.failed,
+          errors: [
+            for (final e in outcome.errors)
+              e.appName == null ? e.withAppName(names[e.appId]) : e,
+          ],
+        );
+      } catch (_) {}
+    }
+    // 新着が無くても、各アプリの最終取得時刻・エラーは変わっている。
+    AppEvents.notifyDataChanged(DataChange.reviews);
+    return outcome;
+  }
 
   // ---- ストア連携（保存も参照もAPI経由） ----
   /// 連携済みストア（'appstore' / 'googleplay'）の一覧。
   ///
   /// store_credentials はクライアントから直接読めないようRLSで閉じてあるため、
   /// （暗号化済みとはいえ資格情報をクライアントに配る理由がない）APIから取得する。
+  /// 確認できなかったとき（通信エラーなど）は ApiException を投げる。
+  /// 以前は空を返していたため、電波が悪いだけで「未連携」と表示されていた。
   static Future<List<String>> connectedStores() async {
     if (!AppConfig.hasApi) return [];
-    final token = _db.auth.currentSession?.accessToken;
-    if (token == null) return [];
-    try {
-      final res = await http.get(
-        Uri.parse('${AppConfig.apiBaseUrl}/api/credentials'),
-        headers: {'Authorization': 'Bearer $token'},
-      ).timeout(const Duration(seconds: 20));
-      if (res.statusCode < 200 || res.statusCode >= 300) return [];
-      final json = jsonDecode(res.body) as Map<String, dynamic>;
-      return ((json['connected'] as List?) ?? []).cast<String>();
-    } catch (_) {
-      return [];
-    }
+    if (_db.auth.currentSession == null) return [];
+    final json = await _request('GET', '/api/credentials',
+        timeout: const Duration(seconds: 20));
+    return ((json['connected'] as List?) ?? []).cast<String>();
+  }
+
+  /// ストア連携を解除する（保存済みの鍵を削除する）。取得済みのレビューは残る。
+  /// 以後、そのストアのアプリは毎時の取得で「認証情報が未登録です」のエラーになる。
+  static Future<void> disconnectStore(String store) async {
+    await _request(
+      'DELETE',
+      '/api/credentials',
+      body: {'store': store},
+      timeout: const Duration(seconds: 20),
+      fallbackError: '連携を解除できませんでした。時間をおいて再度お試しください。',
+    );
+    AppEvents.notifyDataChanged(DataChange.stores);
   }
 
   // 資格情報の保存はサーバー側で実際にストアAPIへ疎通確認してから行われる。
@@ -316,27 +583,31 @@ class Repo {
     required String issuerId,
     required String keyId,
     required String privateKey,
-  }) =>
-      _postApi(
-        '/api/credentials',
-        {
-          'store': 'appstore',
-          'issuerId': issuerId,
-          'keyId': keyId,
-          'privateKey': privateKey,
-        },
-        timeout: const Duration(seconds: 45),
-      );
+  }) async {
+    await _postApi(
+      '/api/credentials',
+      {
+        'store': 'appstore',
+        'issuerId': issuerId,
+        'keyId': keyId,
+        'privateKey': privateKey,
+      },
+      timeout: const Duration(seconds: 45),
+    );
+    AppEvents.notifyDataChanged(DataChange.stores);
+  }
 
-  static Future<void> saveGooglePlayCredentials(String serviceAccountJson) =>
-      _postApi(
-        '/api/credentials',
-        {
-          'store': 'googleplay',
-          'serviceAccountJson': serviceAccountJson,
-        },
-        timeout: const Duration(seconds: 45),
-      );
+  static Future<void> saveGooglePlayCredentials(String serviceAccountJson) async {
+    await _postApi(
+      '/api/credentials',
+      {
+        'store': 'googleplay',
+        'serviceAccountJson': serviceAccountJson,
+      },
+      timeout: const Duration(seconds: 45),
+    );
+    AppEvents.notifyDataChanged(DataChange.stores);
+  }
 
   // ---- 課金 ----
   //
@@ -361,7 +632,9 @@ class Repo {
       },
       timeout: const Duration(seconds: 45), // Appleへの問い合わせを含む
     );
-    return PurchaseConfirmation.fromJson(json);
+    final confirmed = PurchaseConfirmation.fromJson(json);
+    AppEvents.updatePlan(confirmed.plan, force: true);
+    return confirmed;
   }
 
   /// AndroidのGoogle Play課金をサーバーで確定し、profiles.plan に反映する。
@@ -375,7 +648,9 @@ class Repo {
       {'productId': productId, 'purchaseToken': purchaseToken},
       timeout: const Duration(seconds: 45), // Googleへの問い合わせを含む
     );
-    return PurchaseConfirmation.fromJson(json);
+    final confirmed = PurchaseConfirmation.fromJson(json);
+    AppEvents.updatePlan(confirmed.plan, force: true);
+    return confirmed;
   }
 
   // ---- アカウント削除（退会 / Apple審査要件） ----
@@ -384,30 +659,14 @@ class Repo {
     if (!AppConfig.hasApi) {
       throw const ApiException('この機能はサーバー接続が必要です。');
     }
-    final token = _db.auth.currentSession?.accessToken;
-    if (token == null) throw const ApiException('ログインが必要です。');
-    final http.Response res;
-    try {
-      res = await http
-          .delete(
-            Uri.parse('${AppConfig.apiBaseUrl}/api/account'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer $token',
-            },
-          )
-          .timeout(const Duration(seconds: 15));
-    } catch (_) {
-      throw ApiException(
-          'サーバーに接続できませんでした。接続先(${AppConfig.apiBaseUrl})を確認してください。');
-    }
-    if (res.statusCode >= 200 && res.statusCode < 300) return;
-    Map<String, dynamic> json = {};
-    try {
-      json = jsonDecode(res.body) as Map<String, dynamic>;
-    } catch (_) {}
-    throw ApiException(
-        (json['error'] as String?) ?? 'アカウント削除に失敗しました (${res.statusCode})');
+    await _request(
+      'DELETE',
+      '/api/account',
+      // 全データの削除は数十秒かかることがある。先に切れると「失敗」と出るのに
+      // サーバーでは削除が進み、やり直すと 401 になってしまう。
+      timeout: const Duration(seconds: 45),
+      fallbackError: 'アカウントを削除できませんでした。時間をおいて再度お試しください。',
+    );
   }
 
   // ---- リモートpush通知 ----
@@ -440,6 +699,20 @@ class Repo {
         timeout: const Duration(seconds: 20),
       ).then((_) {});
 
+  /// サーバーに保存されている通知対象（'all' / 'low' / 'off'）。未ログイン・未設定なら null。
+  /// 機種変更・再インストールのあとに、端末の設定をサーバーの値に合わせるのに使う。
+  static Future<String?> pushScope() async {
+    final uid = _db.auth.currentUser?.id;
+    if (uid == null) return null;
+    // 自分の profiles は RLS で読める（plan と同じ読み方）。
+    final row = await _db
+        .from('profiles')
+        .select('push_scope')
+        .eq('id', uid)
+        .maybeSingle();
+    return row?['push_scope'] as String?;
+  }
+
   /// 自分の端末にテスト通知を送る（設定が正しいかの確認用）。
   static Future<void> sendTestPush() => _postApi(
         '/api/push/test',
@@ -453,7 +726,9 @@ class Repo {
     if (uid == null) return 'free';
     final row =
         await _db.from('profiles').select('plan').eq('id', uid).maybeSingle();
-    return (row?['plan'] as String?) ?? 'free';
+    final plan = (row?['plan'] as String?) ?? 'free';
+    AppEvents.updatePlan(plan);
+    return plan;
   }
 
   /// 課金画面用の契約状況（プランと今月のAI使用量）。
@@ -481,8 +756,10 @@ class Repo {
           .eq('id', uid)
           .maybeSingle();
     } catch (_) {}
+    final plan = (results[0]?['plan'] as String?) ?? 'free';
+    AppEvents.updatePlan(plan);
     return BillingStatus(
-      plan: (results[0]?['plan'] as String?) ?? 'free',
+      plan: plan,
       aiUnitsUsed: (results[1]?['units'] as num?)?.toInt() ?? 0,
       inTrial: trial?['in_trial'] == true,
       periodEnd: DateTime.tryParse((trial?['current_period_end'] as String?) ?? ''),

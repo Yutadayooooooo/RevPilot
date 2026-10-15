@@ -49,7 +49,7 @@ export default function TokushohoPage() {
         </Row>
         <Row label="支払方法">
           App Store（iOS）または Google Play（Android）のアプリ内課金。
-          お支払いは Apple ID / Google アカウントに登録された支払い方法に請求されます。
+          お支払いは Apple アカウント / Google アカウントに登録された支払い方法に請求されます。
         </Row>
         <Row label="支払時期">
           サブスクリプションのお申し込み時に初回課金し、以後は解約されない限り各期間（1か月または1年）の満了時に自動更新・課金します。
@@ -68,7 +68,7 @@ export default function TokushohoPage() {
             <div>
               <strong>iOS（App Store）でご契約の場合</strong>
               <br />
-              iPhone / iPad の「設定 &gt; ご自身の名前（Apple ID） &gt; サブスクリプション &gt; RevPilot」から
+              iPhone / iPad の「設定 &gt; 一番上のお名前 &gt; サブスクリプション &gt; RevPilot」から
               「サブスクリプションをキャンセル」を選択してください。
               アプリ内の「設定 &gt; プラン」からもこの画面を開けます。
             </div>
@@ -105,7 +105,7 @@ export default function TokushohoPage() {
         </Row>
       </dl>
 
-      <LegalFooter updated="2026年10月11日" />
+      <LegalFooter updated="2026年10月15日" />
     </>
   );
 }

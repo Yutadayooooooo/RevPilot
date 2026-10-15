@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'models.dart';
+import 'notifications.dart';
 
 /// 新着レビューをOSのバナー通知で知らせる（ローカル通知）。
 ///
@@ -15,6 +16,7 @@ class LocalNotifier {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
   static bool _ready = false;
+  static bool _launchChecked = false;
 
   static const _channelId = 'reviews';
   static const _channelName = 'レビュー通知';
@@ -38,6 +40,9 @@ class LocalNotifier {
     );
     await _plugin.initialize(
       const InitializationSettings(android: android, iOS: darwin),
+      // 起動中・バックグラウンドからのタップ。行き先はホーム画面がまとめて開く。
+      onDidReceiveNotificationResponse: (response) => NotifTap.open(
+          NotifTarget.fromPayload(response.payload) ?? const NotifTarget()),
     );
 
     if (Platform.isAndroid) {
@@ -55,6 +60,24 @@ class LocalNotifier {
       );
     }
     _ready = true;
+  }
+
+  /// 初期化し、アプリが終了中にローカル通知のタップで起動していたなら、その行き先を [NotifTap] に置く。
+  /// 起動情報は同じプロセスの間ずっと同じ値を返すので、最初の1回だけ見る
+  /// （ログアウト→ログインでホームが作り直されても、同じレビューを開き直さない）。
+  static Future<void> takeLaunchTarget() async {
+    try {
+      await init();
+      if (_launchChecked) return;
+      _launchChecked = true;
+      final details = await _plugin.getNotificationAppLaunchDetails();
+      if (details?.didNotificationLaunchApp != true) return;
+      NotifTap.open(
+          NotifTarget.fromPayload(details!.notificationResponse?.payload) ??
+              const NotifTarget());
+    } catch (_) {
+      // 読めなくても通常どおり起動するだけ。
+    }
   }
 
   /// OS の通知許可ダイアログを出す（すでに決まっていれば出ない）。
@@ -103,10 +126,12 @@ class LocalNotifier {
   ///
   /// リモートpush（FCM）をフォアグラウンドで受け取ったときに使う。
   /// Androidは起動中のメッセージをOSが表示しないため、自前で出す必要がある。
+  /// [target] を渡すと、タップしたときにその行き先を開く。
   static Future<void> showRaw({
     required int id,
     required String title,
     required String body,
+    NotifTarget? target,
   }) async {
     await init();
     await _plugin.show(
@@ -127,10 +152,12 @@ class LocalNotifier {
           presentSound: true,
         ),
       ),
+      payload: target?.toPayload(),
     );
   }
 
   /// 新着レビュー1件をバナー表示する。
+  /// タップするとそのレビューの詳細を開く（payload にレビューIDを入れる）。
   /// 見出しは「新しいレビュー ★n・アプリ名」で、評価の高低で文言は変えない。
   static Future<void> showReview(ReviewRow r) async {
     await init();
@@ -159,6 +186,9 @@ class LocalNotifier {
           presentSound: true,
         ),
       ),
+      payload:
+          NotifTarget(reviewId: r.id, appId: r.appId.isEmpty ? null : r.appId)
+              .toPayload(),
     );
   }
 }

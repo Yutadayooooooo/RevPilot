@@ -4,22 +4,33 @@ import 'theme.dart';
 import 'models.dart';
 
 /// 星評価の表示。
+///
+/// VoiceOver / TalkBack では星のアイコン5つを個別に読ませず、
+/// 「星5つ中3つ」とまとめて読み上げる。
 class StarRating extends StatelessWidget {
   final int rating;
   final double size;
   const StarRating(this.rating, {super.key, this.size = 16});
 
+  /// 読み上げ用の文言（rating が 1〜5 以外なら「評価なし」）。
+  static String semanticsLabel(int rating) =>
+      rating >= 1 && rating <= 5 ? '星5つ中$ratingつ' : '評価なし';
+
   @override
   Widget build(BuildContext context) {
     final color = AppTheme.ratingColor(rating);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(
-        5,
-        (i) => Icon(
-          i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
-          size: size,
-          color: i < rating ? color : context.borderC,
+    return Semantics(
+      label: semanticsLabel(rating),
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(
+          5,
+          (i) => Icon(
+            i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
+            size: size,
+            color: i < rating ? color : context.borderC,
+          ),
         ),
       ),
     );
@@ -41,8 +52,11 @@ class TopicChip extends StatelessWidget {
       ),
       child: Text(
         topicLabels[topic] ?? topic,
-        style: const TextStyle(
-            fontSize: 11, color: AppTheme.primary, fontWeight: FontWeight.w600),
+        // 11pt の小さい文字なので、primary ではなく読みやすい濃さのアクセントにする。
+        style: TextStyle(
+            fontSize: 11,
+            color: context.accentTextC,
+            fontWeight: FontWeight.w600),
       ),
     );
   }

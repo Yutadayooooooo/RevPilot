@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
+import '../app_events.dart';
 import '../data.dart';
 import '../locked_preview.dart';
 import '../models.dart';
 import '../theme.dart';
+import '../ui.dart';
 import '../widgets.dart';
 
 /// 直近レビューの集計（平均・星分布・トピック件数）。
@@ -23,32 +25,89 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   List<AppRow> _apps = [];
   String? _appId; // 特定アプリで絞り込み
   String? _store; // 特定ストア全体で絞り込み（appIdとは排他）
-  String _plan = 'free';
+  // 既に読んだプランがあれば最初から使う（有料会員にロック表示を一瞬見せない）。
+  String _plan = AppEvents.plan.value ?? 'free';
   LockedPreview _locked = LockedPreview.empty;
 
   @override
   void initState() {
     super.initState();
-    _future = Repo.reviewSummary();
+    _applyScope();
+    _loadApps();
+    _loadPlan();
+    // タブは IndexedStack で保持され、作り直されない。購入やほかのタブでの変更を聞いて読み直す。
+    AppEvents.planChanged.addListener(_onPlanChanged);
+    AppEvents.dataChanged.addListener(_onDataChanged);
+  }
+
+  @override
+  void dispose() {
+    AppEvents.planChanged.removeListener(_onPlanChanged);
+    AppEvents.dataChanged.removeListener(_onDataChanged);
+    super.dispose();
+  }
+
+  void _loadApps() {
     Repo.apps().then((a) {
-      if (mounted) setState(() => _apps = a);
+      if (!mounted) return;
+      setState(() {
+        _apps = a;
+        // 選んでいたアプリが削除されていたら、全アプリに戻す。
+        if (_appId != null && !a.any((x) => x.id == _appId)) {
+          _appId = null;
+          _applyScope();
+        }
+      });
     }).catchError((_) {});
-    Repo.plan().then((p) {
-      if (mounted) setState(() => _plan = p);
-      return p == 'free' ? Repo.lockedPreview() : Future.value(LockedPreview.empty);
-    }).then((l) {
-      if (mounted) setState(() => _locked = l);
-    }).catchError((_) {});
+  }
+
+  /// プランと、Free で見えない古いレビューの件数を読み直す。
+  Future<void> _loadPlan() async {
+    try {
+      final p = await Repo.plan();
+      final locked =
+          p == 'free' ? await Repo.lockedPreview() : LockedPreview.empty;
+      if (mounted) {
+        setState(() {
+          _plan = p;
+          _locked = locked;
+        });
+      }
+    } catch (_) {}
+  }
+
+  /// 購入・復元・解約でプランが変わった。
+  void _onPlanChanged() {
+    _loadPlan();
+    // 有料になると30日より前のレビューも集計に入る（範囲はサーバーの RLS で決まる）。
+    if (mounted) setState(_applyScope);
+  }
+
+  /// 連携・アプリ・レビュー・返信が変わった（件数や未返信の数が変わる）。
+  void _onDataChanged() {
+    final kind = AppEvents.lastChange;
+    if (kind == DataChange.apps || kind == DataChange.stores) _loadApps();
+    if (mounted) setState(_applyScope);
   }
 
   void _applyScope() {
     _future = Repo.reviewSummary(appId: _appId, store: _store);
+    // FutureBuilder が受け取るのは次のビルドから。それより先に失敗しても
+    // 「未処理のエラー」にならないよう受けておく（表示は FutureBuilder が行う）。
+    _future.then<void>((_) {}, onError: (_) {});
   }
+
+  bool get _filtered => _appId != null || _store != null;
 
   Future<void> _refresh() async {
     HapticFeedback.mediumImpact();
     setState(_applyScope);
-    await _future;
+    _loadApps();
+    // 失敗は画面にエラー表示として出すので、ここでは投げない。
+    await Future.wait([
+      _future.then<void>((_) {}, onError: (_) {}),
+      _loadPlan(),
+    ]);
   }
 
   String get _scopeLabel {
@@ -74,10 +133,31 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             child: RefreshIndicator(
               onRefresh: _refresh,
               child: FutureBuilder<ReviewSummary>(
+                // スコープを切り替えたときは作り直してスケルトンから出す。
+                // 同じスコープの読み直し（引っ張って更新・ほかのタブでの変更）は、
+                // 前の数字を出したまま差し替える。
+                key: ValueKey(_appId ?? _store ?? 'all'),
                 future: _future,
                 builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
+                  final waiting =
+                      snap.connectionState == ConnectionState.waiting;
+                  if (waiting && !snap.hasData) {
                     return const _AnalyticsSkeleton();
+                  }
+                  // 通信の失敗を「データがありません」と見せない。
+                  if (snap.hasError && !waiting) {
+                    return ListView(children: [
+                      const SizedBox(height: 80),
+                      EmptyState(
+                        icon: Icons.wifi_off_rounded,
+                        title: '読み込みに失敗しました',
+                        subtitle: friendlyError(snap.error!),
+                        action: FilledButton.tonal(
+                          onPressed: () => setState(_applyScope),
+                          child: const Text('再試行'),
+                        ),
+                      ),
+                    ]);
                   }
                   final summary = snap.data;
                   final empty = summary == null || summary.total == 0;
@@ -86,7 +166,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   if (empty && _locked.hasHidden) {
                     return ListView(
                       padding: const EdgeInsets.all(16),
-                      children: [LockedReviewsTeaser(_locked)],
+                      children: [
+                        LockedReviewsTeaser(_locked, acrossAllApps: _filtered),
+                      ],
                     );
                   }
                   if (empty) {
@@ -117,7 +199,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           : const LockedTopicsCard()),
                       if (_locked.hasHidden) ...[
                         const SizedBox(height: 16),
-                        staggered(LockedReviewsTeaser(_locked)),
+                        staggered(LockedReviewsTeaser(
+                          _locked,
+                          acrossAllApps: _filtered,
+                        )),
                       ],
                     ],
                   );
@@ -150,9 +235,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               const Icon(Icons.filter_list_rounded,
                   size: 18, color: AppTheme.primary),
               const SizedBox(width: 6),
-              Text(_scopeLabel,
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
+              // 長いアプリ名でも▼が画面外に押し出されないよう、名前の方を省略する。
+              Flexible(
+                child: Text(_scopeLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
               const SizedBox(width: 2),
               Icon(Icons.keyboard_arrow_down_rounded,
                   size: 18, color: context.inkC),
@@ -179,14 +269,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           final selected = _appId == appId && _store == store;
           return ListTile(
             leading: Icon(icon,
-                color: selected ? AppTheme.primary : Colors.grey.shade700),
+                color: selected ? context.accentTextC : context.subtleC),
             title: Text(label,
                 style: TextStyle(
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? AppTheme.primary : context.inkC,
+                  color: selected ? context.accentTextC : context.inkC,
                 )),
             trailing: selected
-                ? const Icon(Icons.check_rounded, color: AppTheme.primary)
+                ? Icon(Icons.check_rounded, color: context.accentTextC)
                 : null,
             onTap: () {
               HapticFeedback.selectionClick();
@@ -249,7 +339,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
       children: [
         Expanded(
             child: _statCard('平均評価', avg, Icons.star_rounded,
-                decimals: 2, color: AppTheme.ratingColor(avg.round()))),
+                decimals: 2,
+                color: AppTheme.ratingColor(avg.round()),
+                textColor: context.ratingTextC(avg.round()))),
         const SizedBox(width: 12),
         Expanded(
             child: _statCard('レビュー数', s.total.toDouble(),
@@ -258,20 +350,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         Expanded(
             child: _statCard('未返信', unreplied.toDouble(),
                 Icons.mark_email_unread_outlined,
-                color: unreplied > 0 ? AppTheme.danger : null)),
+                color: unreplied > 0 ? AppTheme.danger : null,
+                textColor: unreplied > 0 ? context.dangerTextC : null)),
       ],
     );
   }
 
+  /// [color] はアイコン用、[textColor] は数字用（状態色のままだと文字では薄すぎる）。
   Widget _statCard(String label, double value, IconData icon,
-      {int decimals = 0, Color? color}) {
+      {int decimals = 0, Color? color, Color? textColor}) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: color ?? Colors.grey.shade500),
+            Icon(icon, size: 18, color: color ?? context.subtleC),
             const SizedBox(height: 8),
             _CountUp(
               value,
@@ -279,10 +373,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: color ?? context.inkC),
+                  color: textColor ?? context.inkC),
             ),
             Text(label,
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                style: TextStyle(fontSize: 11, color: context.subtleC)),
           ],
         ),
       ),
@@ -306,9 +400,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             for (var star = 5; star >= 1; star--) ...[
               Row(
                 children: [
-                  SizedBox(
-                      width: 28,
+                  // 文字を大きくしても「★5」が2行に割れないよう、幅は最小値だけ決める。
+                  ConstrainedBox(
+                      constraints: const BoxConstraints(minWidth: 28),
                       child: Text('★$star',
+                          softWrap: false,
                           style: const TextStyle(fontSize: 12))),
                   Expanded(
                     child: _GrowBar(
@@ -317,11 +413,15 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       delay: Duration(milliseconds: 150 + (5 - star) * 90),
                     ),
                   ),
-                  SizedBox(
-                      width: 32,
-                      child: Text(' ${counts[star]}',
-                          textAlign: TextAlign.right,
-                          style: const TextStyle(fontSize: 12))),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 28),
+                        child: Text('${counts[star]}',
+                            textAlign: TextAlign.right,
+                            softWrap: false,
+                            style: const TextStyle(fontSize: 12))),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
@@ -345,7 +445,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Text('AI分類がまだありません（サーバー接続後に自動分類されます）。',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                  style: TextStyle(color: context.subtleC, fontSize: 13)),
             ],
           ),
         ),
@@ -488,7 +588,8 @@ class _AnalyticsSkeleton extends StatelessWidget {
       ],
     ).animate(onPlay: (c) => c.repeat()).shimmer(
           duration: 1100.ms,
-          color: Colors.white.withValues(alpha: 0.6),
+          // ダークでは白60%だとまぶしい帯になるので、ごく薄くする。
+          color: Colors.white.withValues(alpha: context.isDark ? 0.08 : 0.6),
         );
   }
 }

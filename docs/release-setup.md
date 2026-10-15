@@ -94,6 +94,7 @@
 >   （Site URL = `https://app.revpilot-jp.workers.dev` /
 >   Redirect URLs に `https://app.revpilot-jp.workers.dev/reset-password`）。
 >   ローカル開発でパスワード再設定を試すときは `http://localhost:3000/reset-password` も追加してください。
+>   ⚠️ **`/auth/confirmed` の追加はまだです。下の「2-1-a」を実施してください。**
 >
 > 以下は記録として残します。**スキーマを変更したら 2 を再実行してください（何度でも安全です）。**
 
@@ -109,6 +110,77 @@
    - Site URL: `https://<本番ドメイン>`
    - Redirect URLs に追加: `https://<本番ドメイン>/reset-password`
      （パスワード再設定メールのリンク先。未設定だと再設定が完了できません）
+   - Redirect URLs に追加: `https://<本番ドメイン>/auth/confirmed`
+     （メールアドレス確認のリンクを開いたあとの案内ページ。2-1-a 参照）
+
+#### 2-1-a. メール登録・パスワード再設定の着地点【未完了・リリース前に必須】
+
+メールで新規登録した人が確認メールのリンクを開くと、`/auth/confirmed`
+（「メールアドレスを確認しました。アプリに戻ってログインしてください」の公開ページ）に着くようにしました。
+アプリは `signUp` と確認メールの再送で、`emailRedirectTo` にこのURLを渡します。
+パスワード再設定は、変更後に `/dashboard`（本番は404）へ移動するのをやめ、
+「アプリに戻って新しいパスワードでログインしてください」と表示して終わるようにしました。
+
+**順番が大事です。上から順に行ってください。**
+
+1. **再デプロイする**（`/auth/confirmed` は新しいページで、`/reset-password` も変更したため）
+
+   ```bash
+   cd /Users/yutatomatsu/Documents/revpilot && npm run deploy
+   ```
+
+   デプロイ後、`https://app.revpilot-jp.workers.dev/auth/confirmed` が開けることを確認する。
+   middleware の対象外なので、`ENABLE_WEB_APP` が未設定の本番でも 404 になりません。
+
+2. **Authentication > URL Configuration > Redirect URLs** に次を追加して保存する
+   - `https://app.revpilot-jp.workers.dev/auth/confirmed`
+
+   追加しないと、Supabase はアプリが渡したURLを無視して Site URL（トップのランディングページ）に戻します。
+   ローカルで試すときは `http://localhost:3000/auth/confirmed` も追加してください。
+
+3. **Authentication > Emails > Templates > Reset Password** を token_hash 形式に変える
+
+   アプリ（supabase_flutter）は PKCE 方式で、再設定に必要な鍵（code_verifier）が**端末の中**にあります。
+   標準のテンプレート（`{{ .ConfirmationURL }}`）だと `/reset-password?code=…` に着きますが、
+   Web のページにはその鍵が無いので交換できず、「リンクを確認できませんでした」のままになります。
+   token_hash 形式なら、ページが `verifyOtp` で直接セッションを張れるので、どの端末・ブラウザで開いても動きます。
+   **手順1のデプロイより先に変えると、古いページは token_hash を読めず再設定できなくなります。**
+
+   - Subject: `【RevPilot】パスワードの再設定`
+   - Body:
+
+   ```html
+   <h2>パスワードの再設定</h2>
+   <p>RevPilot のパスワード再設定のご依頼を受け付けました。下のリンクを開き、新しいパスワードを設定してください。</p>
+   <p><a href="{{ .SiteURL }}/reset-password?token_hash={{ .TokenHash }}&type=recovery">パスワードを再設定する</a></p>
+   <p>お心当たりがない場合は、このメールを破棄してください。パスワードは変更されません。</p>
+   ```
+
+4. （任意）**Confirm signup** のテンプレートを日本語にする。リンクは `{{ .ConfirmationURL }}` のままでよい
+   （確認はリンクを開いた時点で済み、そのあと手順2のURLへ戻る）。
+
+   ```html
+   <h2>メールアドレスの確認</h2>
+   <p>RevPilot にご登録いただきありがとうございます。下のリンクを開いて、メールアドレスの確認を完了してください。</p>
+   <p><a href="{{ .ConfirmationURL }}">メールアドレスを確認する</a></p>
+   <p>確認が済んだら、RevPilot アプリに戻ってログインしてください。</p>
+   ```
+
+5. **メールが外部のアドレスに届くか確認する（要確認）**
+
+   Supabase 標準のメール送信は、2024年9月以降**組織（Team）のメンバー宛てにしか送れません**
+   （それ以外の宛先は `email_address_not_authorized`）。この場合、一般の利用者には確認メールも
+   再設定メールも届かず、メール登録の経路が行き止まりになります。
+   **Authentication > Emails > SMTP Settings** でカスタムSMTPを設定してください。
+   独自ドメインが無い今の構成では、Resend は使えません（9章の RESEND の項を参照）。
+   `revpilot.hq@gmail.com` の **Gmail アプリパスワード**（`smtp.gmail.com` / 587）が最も手軽です
+   （送信元は Gmail のアドレスになり、1日の送信数に上限があります）。
+
+6. **チーム外のアドレスで通しで確認する**
+   - アプリでメール登録 → 確認メールが届く → リンクを開くと `/auth/confirmed` に
+     「メールアドレスを確認しました」が出る → アプリでログインできる
+   - アプリの「パスワードをお忘れですか？」→ メールのリンクを開く → 新しいパスワードを設定 →
+     「パスワードを変更しました」が出る → アプリで新しいパスワードでログインできる
 
 ### 2-2. ホスティング（Cloudflare Workers）【完了済み】
 
@@ -999,6 +1071,10 @@ Android では内部テスターアカウントでご確認いただけます。
 - [x] `supabase/schema.sql` を本番DBで実行した（2026-09-07 完了）
 - [x] Supabase の Site URL / Redirect URLs を本番URLにした（2026-10-09 更新）
 - [x] 古い `https://revpilot-app.vercel.app/reset-password` をリダイレクト許可リストから削除した（2026-10-10）
+- [ ] `/auth/confirmed` を含む版を再デプロイし、Redirect URLs に
+      `https://app.revpilot-jp.workers.dev/auth/confirmed` を追加した（2-1-a）
+- [ ] Reset Password のメールテンプレートを token_hash 形式にした（2-1-a。**再デプロイのあとで**）
+- [ ] Supabase Auth のカスタムSMTPを設定し、チーム外のアドレスで登録とパスワード再設定を通した（2-1-a）
 - [x] Cloudflare Workers にデプロイした（2026-10-09 / `app.revpilot-jp.workers.dev`）
 - [x] シークレット10件を Workers に投入した（2026-10-09）
 - [x] `ENABLE_WEB_APP` が**未設定**（`/dashboard` が404になることを本番で確認済み）
@@ -1023,6 +1099,10 @@ Android では内部テスターアカウントでご確認いただけます。
       **Resend アカウント自身のメールアドレス宛にしか送れない**
       （他人宛は 403 `You can only send testing emails to your own email address`）。
       RevPilot は `app.revpilot-jp.workers.dev` で独自ドメインを持たない。
+
+      ⚠️ 利用者宛てに送れる状態（独自ドメインを認証済み）で設定すると、**利用者全員に新着レビューのメール**が
+      届き始める（`lib/poll.ts`。1回の取得で最大5件）。メールはアプリの通知対象の設定
+      （すべて / ★1〜2のみ / 送らない）に従うが、メールだけを止める設定はアプリに無い。
 
       いま設定するとしたら、運営向けの障害通知（`OPERATOR_ALERT_EMAIL=revpilot.hq@gmail.com`）だけ。
       revpilot.hq@gmail.com で Resend に登録し `RESEND_FROM=onboarding@resend.dev` にすれば、

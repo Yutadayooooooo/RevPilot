@@ -3,10 +3,89 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import 'data.dart';
+import 'models.dart';
 import 'screens/apps_screen.dart';
 import 'screens/connect_store_screen.dart';
 import 'theme.dart';
 import 'ui.dart';
+
+/// 「今すぐ取得」の結果を出し分ける（道案内と設定タブで共通）。
+///
+/// サーバーは一部のアプリで失敗しても 200 を返す。中身を見ずに「取得しました」と出すと、
+/// 鍵の失効や権限不足で取得が止まっていても気づけないため、
+/// 失敗があれば、どのアプリが・なぜ失敗したかと連携の確認先をダイアログで出す。
+/// [googlePlay] は Google Play のアプリがあるか（新着が無いときの補足に使う）。
+Future<void> showPollOutcome(
+  BuildContext context,
+  PollOutcome o, {
+  bool googlePlay = false,
+}) async {
+  if (!o.hasFailures) {
+    // 1本も回っていない＝監視するアプリが無い（「新着はありません」と出すと誤解される）。
+    if (o.apps == 0 && o.skipped == 0) {
+      showSnack(context, '監視するアプリがありません。「連携アプリ」から追加してください。');
+      return;
+    }
+    var message = o.headline;
+    if (!o.hasNew && googlePlay) {
+      message = '$message（Google Play は直近7日ぶんのみ取得できます）';
+    }
+    final note = o.skippedNote;
+    showSnack(
+      context,
+      note == null ? message : '$message\n$note',
+      kind: o.hasNew ? SnackKind.success : SnackKind.info,
+    );
+    return;
+  }
+  HapticFeedback.heavyImpact();
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(o.headline),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final e in o.errors.take(5))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text('・${e.line}'),
+              ),
+            if (o.errors.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 6),
+                child: Text('ストア連携の設定をご確認ください。'),
+              ),
+            const SizedBox(height: 4),
+            Text(
+              'このままでは毎時の自動取得も同じ理由で失敗します。',
+              style: TextStyle(fontSize: 13, color: ctx.subtleC),
+            ),
+            if (o.skippedNote != null) ...[
+              const SizedBox(height: 6),
+              Text(o.skippedNote!,
+                  style: TextStyle(fontSize: 13, color: ctx.subtleC)),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('閉じる')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('連携を確認する')),
+      ],
+    ),
+  );
+  if (go == true && context.mounted) {
+    await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const ConnectStoreScreen()));
+  }
+}
 
 /// 登録直後の「最初のレビューが届くまで」の道案内。
 ///
@@ -40,20 +119,19 @@ class _SetupGuideState extends State<SetupGuide> {
     widget.onChanged();
   }
 
+  /// 「今すぐ取得」。一覧の読み直しは、取得の成功で届く AppEvents に任せる。
   Future<void> _fetch() async {
     HapticFeedback.lightImpact();
     setState(() => _fetching = true);
+    PollOutcome? outcome;
     try {
-      await Repo.refreshFromStores();
-      if (mounted) {
-        showSnack(context, 'ストアからレビューを取得しました', kind: SnackKind.success);
-      }
+      outcome = await Repo.refreshFromStores();
     } catch (e) {
-      if (mounted) showSnack(context, '$e', kind: SnackKind.error);
+      if (mounted) showError(context, e);
     } finally {
       if (mounted) setState(() => _fetching = false);
-      widget.onChanged();
     }
+    if (outcome != null && mounted) await showPollOutcome(context, outcome);
   }
 
   @override
@@ -71,7 +149,7 @@ class _SetupGuideState extends State<SetupGuide> {
       ),
       _Step(
         title: '監視するアプリを追加する',
-        body: 'App ID かパッケージ名を入れるだけです。',
+        body: 'App Store は Apple ID（数字）、Google Play はパッケージ名を登録します。',
         done: step2,
         enabled: step1,
         actionLabel: '追加する',

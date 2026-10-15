@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'app_events.dart';
 import 'config.dart';
-import 'notification_primer.dart';
+import 'notifications.dart';
 import 'push.dart';
 import 'theme.dart';
 import 'screens/login_screen.dart';
@@ -25,10 +26,21 @@ Future<void> main() async {
       url: AppConfig.supabaseUrl,
       publishableKey: AppConfig.supabaseAnonKey,
     );
+    _watchSignOut();
     await _setUpPush();
   }
 
   runApp(const RevPilotApp());
+}
+
+/// ログアウトしたら、前のアカウントの状態（プラン・通知の行き先）を持ち越さない。
+void _watchSignOut() {
+  Supabase.instance.client.auth.onAuthStateChange.listen((state) {
+    if (state.event == AuthChangeEvent.signedOut) {
+      AppEvents.reset();
+      NotifTap.clear();
+    }
+  });
 }
 
 /// リモートpush（アプリを終了していても届く通知）の準備。
@@ -40,22 +52,18 @@ Future<void> _setUpPush() async {
   await PushService.init();
   if (!PushService.configured) return;
 
-  // 許可を求めるのは、ホーム画面で通知の説明（NotificationPrimer）を見せたあと。
-  // 説明を済ませた人だけ、起動時・サインイン時に端末を登録し直す。
+  // 許可を求めるのは、ホーム画面で通知の説明（NotificationPrimer）を見せて
+  // 「通知をオンにする」を選んでもらったときだけ。起動時・サインイン時は
+  // OS で許可済みの端末だけを登録し直し、ダイアログは出さない
+  // （ここで許可を求めると、「あとで」を選んだ人にも説明なしのダイアログが出てしまう）。
   final auth = Supabase.instance.client.auth;
-  Future<void> registerIfPrimed() async {
-    if (await NotificationPrimer.done()) {
-      await PushService.registerForCurrentUser();
-    }
-  }
-
   if (auth.currentSession != null) {
     // 起動をブロックしない。
-    unawaited(registerIfPrimed());
+    unawaited(PushService.registerForCurrentUser());
   }
   auth.onAuthStateChange.listen((state) {
     if (state.event == AuthChangeEvent.signedIn) {
-      unawaited(registerIfPrimed());
+      unawaited(PushService.registerForCurrentUser());
     }
   });
 }
