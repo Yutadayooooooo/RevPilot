@@ -747,12 +747,14 @@ class Repo {
           .maybeSingle()
           .catchError((_) => null),
     ]);
-    // トライアルの列は後から足したので、無いDBでも課金画面を落とさないよう別に読む。
+    // トライアル・アプリ内課金の列は後から足したので、無いDBでも課金画面を落とさないよう別に読む。
     Map<String, dynamic>? trial;
     try {
       trial = await _db
           .from('profiles')
-          .select('in_trial, current_period_end')
+          .select('in_trial, current_period_end, '
+              'apple_original_transaction_id, apple_expires_at, '
+              'google_purchase_token, google_expires_at')
           .eq('id', uid)
           .maybeSingle();
     } catch (_) {}
@@ -763,7 +765,28 @@ class Repo {
       aiUnitsUsed: (results[1]?['units'] as num?)?.toInt() ?? 0,
       inTrial: trial?['in_trial'] == true,
       periodEnd: DateTime.tryParse((trial?['current_period_end'] as String?) ?? ''),
+      store: plan == 'free' ? null : _billingStore(trial),
     );
+  }
+
+  /// 有料プランを請求しているストア。期限内の購入がどちらか一方にだけあるときに決める。
+  ///
+  /// サーバーは購入を確認したストアの列だけを書き、もう一方の列は消さない。
+  /// 期限の過ぎた古い購入は数えない。両方とも期限内・どちらも無いときは決めつけず null。
+  static BillingStore? _billingStore(Map<String, dynamic>? p) {
+    if (p == null) return null;
+    final now = DateTime.now();
+    bool active(String idKey, String expiresKey) {
+      final id = p[idKey];
+      if (id is! String || id.isEmpty) return false;
+      final expires = DateTime.tryParse((p[expiresKey] as String?) ?? '');
+      return expires == null || expires.isAfter(now);
+    }
+
+    final apple = active('apple_original_transaction_id', 'apple_expires_at');
+    final google = active('google_purchase_token', 'google_expires_at');
+    if (apple == google) return null;
+    return apple ? BillingStore.apple : BillingStore.google;
   }
 }
 
@@ -811,6 +834,13 @@ int planAiReplies(String plan) =>
 String planLabel(String plan) =>
     planCatalog.where((p) => p.key == plan).firstOrNull?.name ?? plan;
 
+/// アプリ内課金のストア。
+enum BillingStore { apple, google }
+
+extension BillingStoreLabel on BillingStore {
+  String get label => this == BillingStore.apple ? 'App Store' : 'Google Play';
+}
+
 /// 課金画面で使う、利用者の契約状況。
 class BillingStatus {
   final String plan;
@@ -822,11 +852,16 @@ class BillingStatus {
   final bool inTrial;
   final DateTime? periodEnd;
 
+  /// 今の有料プランを請求しているストア（分からなければ null）。
+  /// Google Play で契約した人が iPhone で開いたときなど、この端末のストアと違うことがある。
+  final BillingStore? store;
+
   const BillingStatus({
     required this.plan,
     required this.aiUnitsUsed,
     this.inTrial = false,
     this.periodEnd,
+    this.store,
   });
 
   /// 「Pro 無料トライアル中・10月12日まで」のような一文。トライアル中でなければ null。

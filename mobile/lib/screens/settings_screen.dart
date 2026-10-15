@@ -179,9 +179,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       // 端末側で登録に失敗した理由があれば添える（サーバーの文言だけでは原因が分からない）。
+      // 通信できないときなどは同じ文言になるので、重ねて出さない。
       final reason = PushService.lastError;
       final message = friendlyError(e);
-      final msg = reason == null ? message : '$message\n（端末側: $reason）';
+      final msg = reason == null || reason == message
+          ? message
+          : '$message\n$reason';
       final off = NotificationPrimer.status.value != NotifPermission.allowed;
       if (mounted) {
         showSnack(
@@ -375,7 +378,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// アカウントを削除してもストアの契約は続き、請求が止まらないため。
   /// 戻り値は削除へ進むか。
   Future<bool> _confirmSubscriptionBeforeDelete(BillingStatus? billing) async {
-    final ios = Platform.isIOS;
+    // 契約したストアで案内する（Google Play で契約して iPhone から削除する人もいる）。
+    // 分からなければこの端末のストア。
+    final store = billing?.store ?? deviceBillingStore;
+    final apple = store == BillingStore.apple;
     final trial = billing != null && billing.inTrial;
     final end = billing?.periodEnd?.toLocal();
     final status = billing == null
@@ -385,10 +391,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 '${end == null ? '' : '（${end.month}月${end.day}日まで）'}。'
             : '${planLabel(billing.plan)}プランをご契約中です。';
     final subscription =
-        ios ? 'App Store のサブスクリプション' : 'Google Play の定期購入';
-    final where = ios
-        ? 'iPhone の「設定 > 一番上のお名前 > サブスクリプション」'
-        : 'Google Play ストアの「お支払いと定期購入 > 定期購入」';
+        apple ? 'App Store のサブスクリプション' : 'Google Play の定期購入';
+    final where = apple
+        ? (Platform.isIOS
+            ? 'iPhone の「設定 > 一番上のお名前 > サブスクリプション」'
+            : 'ご契約の iPhone などの「設定 > 一番上のお名前 > サブスクリプション」')
+        : (Platform.isAndroid
+            ? 'Google Play ストアの「お支払いと定期購入 > 定期購入」'
+            : 'Google Play のウェブサイト（play.google.com）の「お支払いと定期購入 > 定期購入」');
     final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -420,7 +430,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     if (choice == 'manage' && mounted) {
       // 管理シートで解約された可能性があるので、閉じたら契約状況を読み直す。
-      if (await openSubscriptionManagement(context)) _load();
+      if (await openSubscriptionManagement(context, store: store)) _load();
       return false;
     }
     return choice == 'proceed';
@@ -734,8 +744,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onPressed: _deleting ? null : _signOut,
           icon: const Icon(Icons.logout, size: 18),
           label: const Text('ログアウト'),
+          // 文字に使うので、塗り用の danger ではなく文字用の濃さにする（ダークでも 4.5:1 以上）。
           style: OutlinedButton.styleFrom(
-            foregroundColor: AppTheme.danger,
+            foregroundColor: context.dangerTextC,
             minimumSize: const Size.fromHeight(48),
           ),
         ),
@@ -751,7 +762,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               : const Icon(Icons.delete_forever_outlined, size: 18),
           label: Text(_deleting ? '削除しています…' : 'アカウントを削除'),
           style: TextButton.styleFrom(
-            foregroundColor: AppTheme.danger,
+            foregroundColor: context.dangerTextC,
             minimumSize: const Size.fromHeight(44),
           ),
         ),
@@ -770,28 +781,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// 読み直しに失敗したとき（前回の内容は出したまま）。
   Widget _staleBanner(Object error) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-      decoration: BoxDecoration(
-        color: AppTheme.warning.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.wifi_off_rounded, size: 18, color: context.warningTextC),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '最新の情報を取得できませんでした。${friendlyError(error)}',
-              style: const TextStyle(fontSize: 12.5, height: 1.5),
-            ),
-          ),
-          TextButton(
-            onPressed: _loading ? null : _load,
-            child: const Text('再試行'),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: StaleBanner(
+        message: '最新の情報を取得できませんでした。${friendlyError(error)}',
+        onRetry: _loading ? null : _load,
       ),
     );
   }
@@ -930,11 +924,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _kv(String k, String v) {
+    final label = Text(k, style: TextStyle(color: context.subtleC));
+    // 見出しの欄は 68pt 固定なので、文字を大きくすると「ログイン」が折り返してしまう。
+    // 収まらない大きさでは、見出しを値の上に置く。
+    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    if (scale > 1.2) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [label, Text(v)],
+      );
+    }
     return Row(
       children: [
-        SizedBox(
-            width: 68,
-            child: Text(k, style: TextStyle(color: context.subtleC))),
+        SizedBox(width: 68, child: label),
         Expanded(child: Text(v)),
       ],
     );

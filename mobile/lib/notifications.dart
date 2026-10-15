@@ -22,6 +22,14 @@ class NotifStore {
   static const _scopeKey = 'notifications_scope';
   static const _maxRemembered = 500;
 
+  /// これより前に書かれたレビューはバナーで知らせない（通知済みとして記録だけする）。
+  ///
+  /// アプリを追加した直後の取り込みでは過去のレビューがまとめて入る。
+  /// サーバーは追加時刻の24時間前より古いものを通知しない（lib/poll.ts の NOTIFY_BACKLOG_GRACE_MS）。
+  /// 端末ではここで日時を見ないと、数か月前の★1が「新しいレビュー」としてバナーで出てしまう
+  /// （アプリの追加時刻は読んでいないので、今から24時間で区切る）。
+  static const _bannerMaxAge = Duration(hours: 24);
+
   /// 通知タブのフィードに並べる最大件数（すべて対象だと際限なく増えるため）。
   static const feedLimit = 50;
 
@@ -139,6 +147,8 @@ class NotifStore {
   ///
   /// 初回起動時は既存分をすべて通知済み扱いにして、過去のレビューで
   /// バナーが大量に出るのを防ぐ（＝以降の新着だけ通知する）。
+  /// 初めて見るレビューでも、書かれてから24時間より前のもの（アプリ追加時に取り込んだ過去分）は
+  /// 記録だけして返さない。日時が分からないものは新着として扱う（サーバーと同じ）。
   static Future<List<ReviewRow>> takeUnnotified() async {
     try {
       final reviews = await targetReviews();
@@ -155,7 +165,10 @@ class NotifStore {
       if (fresh.isNotEmpty) {
         await _remember(stored, fresh.map((r) => r.id));
       }
-      return fresh;
+      final since = DateTime.now().subtract(_bannerMaxAge);
+      return fresh
+          .where((r) => r.reviewedAt == null || r.reviewedAt!.isAfter(since))
+          .toList();
     } catch (_) {
       return const [];
     }

@@ -33,10 +33,14 @@ class AppsScreen extends StatefulWidget {
 class _AppsScreenState extends State<AppsScreen> {
   late Future<List<AppRow>> _future;
 
+  /// 最後に読めた一覧。FutureBuilder は読み直しに失敗すると前回の値を捨てるので、
+  /// 自分で持っておき、失敗しても一覧と「アプリを追加」を出したままにする。
+  List<AppRow>? _last;
+
   @override
   void initState() {
     super.initState();
-    _future = Repo.apps();
+    _future = _fetch();
     // 追加・編集・削除と、取得の結果（最終取得・エラー）が変わったら読み直す。
     AppEvents.dataChanged.addListener(_onDataChanged);
   }
@@ -52,11 +56,13 @@ class _AppsScreenState extends State<AppsScreen> {
     _reload();
   }
 
-  void _reload() => setState(() => _future = Repo.apps());
+  Future<List<AppRow>> _fetch() => Repo.apps().then((a) => _last = a);
+
+  void _reload() => setState(() => _future = _fetch());
 
   Future<void> _refresh() async {
     HapticFeedback.mediumImpact();
-    final f = Repo.apps();
+    final f = _fetch();
     setState(() => _future = f);
     try {
       await f;
@@ -77,8 +83,8 @@ class _AppsScreenState extends State<AppsScreen> {
     return FutureBuilder<List<AppRow>>(
       future: _future,
       builder: (context, snap) {
-        // 読み直しの間は前回の一覧を出したままにする（FutureBuilder は前回の値を残す）。
-        final apps = snap.data;
+        // 読み直しの間も、失敗したときも、前回の一覧を出したままにする。
+        final apps = snap.data ?? _last;
         return Scaffold(
           appBar: AppBar(title: const Text('連携アプリ')),
           // 一覧を読めていないときは追加ボタンを出さない
@@ -100,7 +106,14 @@ class _AppsScreenState extends State<AppsScreen> {
   }
 
   Widget _body(AsyncSnapshot<List<AppRow>> snap) {
-    final apps = snap.data;
+    final apps = snap.data ?? _last;
+    // 一覧は出せているが、読み直しには失敗した。
+    final stale = snap.hasError && apps != null
+        ? StaleBanner(
+            message: '最新の情報を取得できませんでした。${friendlyError(snap.error!)}',
+            onRetry: _reload,
+          )
+        : null;
     if (apps == null) {
       if (snap.hasError) {
         return ListView(
@@ -125,6 +138,11 @@ class _AppsScreenState extends State<AppsScreen> {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
+          if (stale != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: stale,
+            ),
           const SizedBox(height: 80),
           EmptyState(
             icon: Icons.apps_outlined,
@@ -141,10 +159,11 @@ class _AppsScreenState extends State<AppsScreen> {
     return ListView.separated(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-      itemCount: apps.length,
+      itemCount: apps.length + (stale != null ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, i) {
-        final a = apps[i];
+        if (stale != null && i == 0) return stale;
+        final a = apps[stale != null ? i - 1 : i];
         return Card(
           child: ListTile(
             onTap: () => _openEditor(a),
@@ -364,6 +383,8 @@ class _AppEditScreenState extends State<AppEditScreen> {
             description: _desc.text.trim().isEmpty ? null : _desc.text.trim(),
             tone: _tone,
             style: style);
+        // 画面を閉じるだけだと保存できたか分からない（スナックバーは閉じたあとも残る）。
+        if (mounted) showSnack(context, '保存しました', kind: SnackKind.success);
       } else {
         final added = await Repo.addApp(
           store: _store,
@@ -530,7 +551,10 @@ class _AppEditScreenState extends State<AppEditScreen> {
     try {
       await Repo.deleteApp(widget.existing!.id);
       HapticFeedback.mediumImpact();
-      if (mounted) Navigator.pop(context, true);
+      if (!mounted) return;
+      showSnack(context, '「${widget.existing!.name}」を削除しました',
+          kind: SnackKind.success);
+      Navigator.pop(context, true);
     } catch (e) {
       if (mounted) showError(context, e, prefix: '削除できませんでした');
       if (mounted) setState(() => _saving = false);

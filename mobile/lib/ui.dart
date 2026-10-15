@@ -21,6 +21,8 @@ enum SnackKind { info, success, error }
 /// エラーは読み切れるよう長めに出す（既定 7 秒。ほかは 4 秒）。
 /// [actionLabel] と [onAction] を渡すと操作ボタン（「再試行」「連携を確認」など）が付く。
 /// 操作ボタンがあっても、[duration] が過ぎれば自動で閉じる。
+/// ただし VoiceOver / TalkBack の利用中は、操作ボタンへたどり着く前に消えないよう閉じない
+/// （閉じるボタンを付ける）。
 void showSnack(
   BuildContext context,
   String message, {
@@ -35,6 +37,7 @@ void showSnack(
     SnackKind.info => (Icons.info_outline, Colors.white),
   };
   final hasAction = actionLabel != null && onAction != null;
+  final persist = hasAction && MediaQuery.accessibleNavigationOf(context);
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
@@ -45,7 +48,9 @@ void showSnack(
                   ? const Duration(seconds: 6)
                   : const Duration(seconds: 4)),
       // 操作ボタン付きは既定で閉じなくなるので、時間で閉じるよう明示する。
-      persist: false,
+      // 読み上げ中だけは残し、閉じるボタンで消せるようにする。
+      persist: persist,
+      showCloseIcon: persist,
       action: hasAction
           ? SnackBarAction(label: actionLabel, onPressed: onAction)
           : null,

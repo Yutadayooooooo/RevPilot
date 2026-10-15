@@ -13,7 +13,8 @@ import 'ui.dart';
 ///
 /// サーバーは一部のアプリで失敗しても 200 を返す。中身を見ずに「取得しました」と出すと、
 /// 鍵の失効や権限不足で取得が止まっていても気づけないため、
-/// 失敗があれば、どのアプリが・なぜ失敗したかと連携の確認先をダイアログで出す。
+/// 失敗があれば、どのアプリが・なぜ失敗したかと連携の確認先をダイアログで出す
+/// （回数制限などの一時的な失敗だけなら、確認先は出さない）。
 /// [googlePlay] は Google Play のアプリがあるか（新着が無いときの補足に使う）。
 Future<void> showPollOutcome(
   BuildContext context,
@@ -39,6 +40,10 @@ Future<void> showPollOutcome(
     return;
   }
   HapticFeedback.heavyImpact();
+  // 回数制限・ストアの一時的な障害・通信の失敗だけなら、連携を見直す必要はない
+  // （「同じ理由で失敗します」と出すと、正しく動いている鍵を登録し直させてしまう）。
+  final temporary =
+      o.errors.isNotEmpty && o.errors.every((e) => e.isTemporary);
   final go = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -60,7 +65,9 @@ Future<void> showPollOutcome(
               ),
             const SizedBox(height: 4),
             Text(
-              'このままでは毎時の自動取得も同じ理由で失敗します。',
+              temporary
+                  ? '毎時の自動取得で、時間をおいて改めて取得します。'
+                  : 'このままでは毎時の自動取得も同じ理由で失敗します。',
               style: TextStyle(fontSize: 13, color: ctx.subtleC),
             ),
             if (o.skippedNote != null) ...[
@@ -72,12 +79,18 @@ Future<void> showPollOutcome(
         ),
       ),
       actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('閉じる')),
-        FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('連携を確認する')),
+        if (temporary)
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('閉じる'))
+        else ...[
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('閉じる')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('連携を確認する')),
+        ],
       ],
     ),
   );

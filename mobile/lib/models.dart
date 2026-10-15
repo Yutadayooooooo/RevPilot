@@ -358,6 +358,12 @@ class PollError {
 
   /// 「アプリ名：理由」の1行（アプリ名が分からなければ理由だけ）。
   String get line => appName == null ? message : '$appName：$message';
+
+  /// 時間をおけば直る失敗か（回数制限・ストアの一時的な障害・通信の失敗）。
+  /// サーバー（lib/poll.ts の storeErrorMessage）も storeErrorText も、
+  /// これらには「時間をおいて」「しばらくしてから」などの案内を付けている。
+  bool get isTemporary =>
+      RegExp(r'時間をおいて|しばらくしてから|少し待ってから|一時的').hasMatch(message);
 }
 
 /// アプリ追加の結果（POST /api/apps）。

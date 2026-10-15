@@ -148,6 +148,10 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
         backgroundColor: dark ? const Color(0xFF334155) : ink,
         contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+        // 操作ボタン（「元に戻す」「再試行」など）の文字色。既定の inversePrimary は
+        // ダークの背景上で約 1.6:1 しかなく読めないので、どちらの背景でも 4.5:1 以上の色にする。
+        actionTextColor: accentTextDark,
+        closeIconColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         insetPadding: const EdgeInsets.all(16),
       ),

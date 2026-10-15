@@ -142,9 +142,12 @@ class PushService {
 
       final token = await _obtainToken();
       if (token == null) {
-        lastError = Platform.isIOS && await messaging.getAPNSToken() == null
-            ? 'APNsトークンを取得できませんでした'
-            : 'トークンを取得できませんでした';
+        // 利用者には仕組みの名前（APNs・トークン）を出さず、何が起きたかだけを伝える。
+        lastError = 'この端末を通知先に登録できませんでした。しばらくしてからもう一度お試しください。';
+        if (kDebugMode) {
+          debugPrint('[push] no token'
+              '${Platform.isIOS && await messaging.getAPNSToken() == null ? ' (APNs token is null)' : ''}');
+        }
         return false;
       }
       _currentToken = token;

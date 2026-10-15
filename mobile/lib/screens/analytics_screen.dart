@@ -29,6 +29,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   String _plan = AppEvents.plan.value ?? 'free';
   LockedPreview _locked = LockedPreview.empty;
 
+  /// 最後に読めた集計とそのスコープ。FutureBuilder は読み直しに失敗すると前回の値を捨てるので、
+  /// 自分で持っておき、裏での読み直しに失敗しても数字を出したままにする。
+  ReviewSummary? _last;
+  String? _lastScope;
+
   @override
   void initState() {
     super.initState();
@@ -91,11 +96,18 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   }
 
   void _applyScope() {
+    final scope = _scopeKey;
     _future = Repo.reviewSummary(appId: _appId, store: _store);
     // FutureBuilder が受け取るのは次のビルドから。それより先に失敗しても
     // 「未処理のエラー」にならないよう受けておく（表示は FutureBuilder が行う）。
-    _future.then<void>((_) {}, onError: (_) {});
+    _future.then<void>((s) {
+      _last = s;
+      _lastScope = scope;
+    }, onError: (_) {});
   }
+
+  /// 今のスコープ（アプリ・ストア・全体）。
+  String get _scopeKey => _appId ?? _store ?? 'all';
 
   bool get _filtered => _appId != null || _store != null;
 
@@ -136,16 +148,28 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 // スコープを切り替えたときは作り直してスケルトンから出す。
                 // 同じスコープの読み直し（引っ張って更新・ほかのタブでの変更）は、
                 // 前の数字を出したまま差し替える。
-                key: ValueKey(_appId ?? _store ?? 'all'),
+                key: ValueKey(_scopeKey),
                 future: _future,
                 builder: (context, snap) {
                   final waiting =
                       snap.connectionState == ConnectionState.waiting;
-                  if (waiting && !snap.hasData) {
+                  // 同じスコープで一度読めていれば、失敗しても前回の数字を出したままにする。
+                  final last = _lastScope == _scopeKey ? _last : null;
+                  if (waiting && !snap.hasData && last == null) {
                     return const _AnalyticsSkeleton();
                   }
+                  final stale = snap.hasError && !waiting && last != null
+                      ? Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: StaleBanner(
+                            message: '最新の情報を取得できませんでした。'
+                                '${friendlyError(snap.error!)}',
+                            onRetry: () => setState(_applyScope),
+                          ),
+                        )
+                      : null;
                   // 通信の失敗を「データがありません」と見せない。
-                  if (snap.hasError && !waiting) {
+                  if (snap.hasError && !waiting && last == null) {
                     return ListView(children: [
                       const SizedBox(height: 80),
                       EmptyState(
@@ -159,7 +183,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       ),
                     ]);
                   }
-                  final summary = snap.data;
+                  final summary = snap.data ?? last;
                   final empty = summary == null || summary.total == 0;
                   // 閲覧範囲内は空でも、それより前に保存済みのレビューがあるなら
                   // 「データがない」とは言わずにチラ見せする（件数は全アプリ合計）。
@@ -167,14 +191,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     return ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
+                        if (stale != null) stale,
                         LockedReviewsTeaser(_locked, acrossAllApps: _filtered),
                       ],
                     );
                   }
                   if (empty) {
-                    return ListView(children: const [
-                      SizedBox(height: 80),
-                      EmptyState(
+                    return ListView(children: [
+                      if (stale != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                          child: stale,
+                        ),
+                      const SizedBox(height: 80),
+                      const EmptyState(
                         icon: Icons.insights_outlined,
                         title: 'このスコープにはデータがありません',
                         subtitle: '別のアプリ/ストアを選ぶか、レビューが集まるとここに表示されます。',
@@ -190,6 +220,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     key: ValueKey('${_appId ?? _store ?? "all"}-${summary.total}'),
                     padding: const EdgeInsets.all(16),
                     children: [
+                      if (stale != null) stale,
                       staggered(_summaryRow(summary)),
                       const SizedBox(height: 16),
                       staggered(_ratingDistribution(summary)),
@@ -444,7 +475,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               const Text('トピック傾向',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text('AI分類がまだありません（サーバー接続後に自動分類されます）。',
+              // アプリを追加したときに取り込んだ過去のレビューは分類しない（時間がかかるため）。
+              Text('まだ分類されたレビューがありません。新しく届いたレビューから自動で分類します。',
                   style: TextStyle(color: context.subtleC, fontSize: 13)),
             ],
           ),

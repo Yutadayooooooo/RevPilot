@@ -322,33 +322,49 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_announcements.isNotEmpty) _announcementBanner(),
-          if (broken.isNotEmpty) _pollErrorBanner(broken),
-          if (_searchOpen) _searchField(),
-          _bar(),
-          if (_activeCount > 0) _activeChips(),
-          if (_fetching) _fetchingStrip(),
-          Expanded(
-            child: Stack(
-              children: [
-                RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: _listArea(),
+      body: LayoutBuilder(
+        builder: (context, box) => Column(
+          children: [
+            // 一覧の上（お知らせ・取得エラー・検索・絞り込み）は画面の半分までにし、
+            // 収まらなければその中でスクロールさせる。文字を大きくしている端末や
+            // キーボードを開いたときに、一覧の高さが 0 になってレビューが見えなくなるのを防ぐ。
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: box.maxHeight / 2),
+              child: SingleChildScrollView(
+                // ステータスバーのタップで先頭へ戻るのは一覧のほう。
+                primary: false,
+                child: Column(
+                  children: [
+                    if (_announcements.isNotEmpty) _announcementBanner(),
+                    if (broken.isNotEmpty) _pollErrorBanner(broken),
+                    if (_searchOpen) _searchField(),
+                    _bar(),
+                    if (_activeCount > 0) _activeChips(),
+                    if (_fetching) _fetchingStrip(),
+                  ],
                 ),
-                // 一覧を出したまま読み直している間は、上端に細いバーだけを出す。
-                if (_loading && _items != null && !_pulling)
-                  const Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: LinearProgressIndicator(minHeight: 2),
-                  ),
-              ],
+              ),
             ),
-          ),
-        ],
+            Expanded(
+              child: Stack(
+                children: [
+                  RefreshIndicator(
+                    onRefresh: _refresh,
+                    child: _listArea(),
+                  ),
+                  // 一覧を出したまま読み直している間は、上端に細いバーだけを出す。
+                  if (_loading && _items != null && !_pulling)
+                    const Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: LinearProgressIndicator(minHeight: 2),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -634,8 +650,11 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                         fontWeight: FontWeight.w700,
                         color: context.dangerTextC)),
                 const SizedBox(height: 2),
+                // 複数のアプリでは1件2行までにする（全文は設定タブの「連携アプリ」で見られる）。
                 for (final l in lines)
                   Text(l,
+                      maxLines: single ? null : 2,
+                      overflow: single ? null : TextOverflow.ellipsis,
                       style: TextStyle(
                           fontSize: 12, height: 1.4, color: context.inkC)),
                 if (broken.length > 3)
@@ -834,8 +853,9 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // 薄い色付きの面に載る小さい文字なので、塗り用の primary ではなく文字用の濃さにする。
             Icon(icon,
-                size: 18, color: active ? AppTheme.primary : context.inkC),
+                size: 18, color: active ? context.accentTextC : context.inkC),
             const SizedBox(width: 6),
             Flexible(
               child: Text(label,
@@ -843,7 +863,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: active ? AppTheme.primary : context.inkC)),
+                      color: active ? context.accentTextC : context.inkC)),
             ),
             if (badge != null) ...[
               const SizedBox(width: 6),
@@ -851,7 +871,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
                 decoration: const BoxDecoration(
-                    color: AppTheme.primary, shape: BoxShape.circle),
+                    color: AppTheme.accentText, shape: BoxShape.circle),
                 child: Text(badge,
                     style: const TextStyle(
                         color: Colors.white,
@@ -931,8 +951,9 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
             widthFactor: 1,
             child: Container(
               padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+              // 白い小さな文字を載せるので、primary より一段濃い色にする（4.5:1 以上）。
               decoration: BoxDecoration(
-                color: AppTheme.primary,
+                color: AppTheme.accentText,
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Row(
@@ -1050,6 +1071,10 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
 
     final choice = await showModalBottomSheet<String>(
       context: context,
+      // 文字を大きくしている端末でもボタンまで届くよう、高さを画面いっぱいまで許し、
+      // 説明はスクロールさせる（既定の 9/16 の高さではボタンが画面外に出ていた）。
+      isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: context.surfaceC,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -1063,18 +1088,31 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('未返信 ${targets.length} 件に一括返信',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                if (withDraft > 0)
-                  Text('下書きのある $withDraft 件は、その下書きを使います（AI返信の枠は使いません）。',
-                      style: note),
-                if (noDraft > 0)
-                  Text('下書きのない $noDraft 件は、AIが返信を作成します。', style: note),
-                if (capped)
-                  Text('現在のプランでは一度に $limit 件までです。残りはもう一度実行してください。',
-                      style: note),
+                // 説明は収まらなければスクロールし、ボタンは常に下に見えるようにする。
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text('未返信 ${targets.length} 件に一括返信',
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        if (withDraft > 0)
+                          Text(
+                              '下書きのある $withDraft 件は、その下書きを使います（AI返信の枠は使いません）。',
+                              style: note),
+                        if (noDraft > 0)
+                          Text('下書きのない $noDraft 件は、AIが返信を作成します。',
+                              style: note),
+                        if (capped)
+                          Text(
+                              '現在のプランでは一度に $limit 件までです。残りはもう一度実行してください。',
+                              style: note),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 16),
                 FilledButton.icon(
                   onPressed: () => Navigator.pop(ctx, 'post'),
@@ -1366,10 +1404,11 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
           constraints: const BoxConstraints(minHeight: 44),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.primary : context.surfaceC,
+            // 選択中は白い文字を載せるので、primary より一段濃い色にする（4.5:1 以上）。
+            color: selected ? AppTheme.accentText : context.surfaceC,
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-                color: selected ? AppTheme.primary : context.borderC),
+                color: selected ? AppTheme.accentText : context.borderC),
           ),
           child: Center(
             widthFactor: 1,
@@ -1391,54 +1430,60 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
   Future<void> _openSortSheet() async {
     await showModalBottomSheet<void>(
       context: context,
+      // 文字を大きくしている端末でも全部の選択肢に届くよう、収まらなければスクロールさせる。
+      isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: context.surfaceC,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
         return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 10),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.borderC,
-                  borderRadius: BorderRadius.circular(999),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: context.borderC,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('並び替え',
-                      style:
-                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('並び替え',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
                 ),
-              ),
-              for (final s in ReviewSort.values)
-                ListTile(
-                  selected: _sort == s,
-                  title: Text(s.label,
-                      style: TextStyle(
-                        fontWeight:
-                            _sort == s ? FontWeight.w700 : FontWeight.w500,
-                        color: _sort == s ? context.accentTextC : context.inkC,
-                      )),
-                  trailing: _sort == s
-                      ? Icon(Icons.check_rounded, color: context.accentTextC)
-                      : null,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    _sort = s;
-                    _load(fresh: true);
-                    Navigator.pop(ctx);
-                  },
-                ),
-              const SizedBox(height: 8),
-            ],
+                for (final s in ReviewSort.values)
+                  ListTile(
+                    selected: _sort == s,
+                    title: Text(s.label,
+                        style: TextStyle(
+                          fontWeight:
+                              _sort == s ? FontWeight.w700 : FontWeight.w500,
+                          color:
+                              _sort == s ? context.accentTextC : context.inkC,
+                        )),
+                    trailing: _sort == s
+                        ? Icon(Icons.check_rounded, color: context.accentTextC)
+                        : null,
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      _sort = s;
+                      _load(fresh: true);
+                      Navigator.pop(ctx);
+                    },
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         );
       },

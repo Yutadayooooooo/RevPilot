@@ -702,11 +702,22 @@ class _ConnectStoreScreenState extends State<ConnectStoreScreen> {
               children: [
                 Icon(icon, color: context.inkC),
                 const SizedBox(width: 8),
-                Text(title,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16)),
-                const Spacer(),
-                _badge(store),
+                // 文字を大きくしている人でもはみ出さないよう、バッジは次の行へ折り返せるようにする
+                // （1行に収まるときは右端に寄せる）。
+                Expanded(
+                  child: Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
+                      _badge(store),
+                    ],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 14),

@@ -164,8 +164,9 @@ export default function ResetPasswordPage() {
           ) : (
             <form onSubmit={submit} className="space-y-3">
               <div>
-                <Label>新しいパスワード</Label>
+                <Label htmlFor="new-password">新しいパスワード</Label>
                 <Input
+                  id="new-password"
                   type="password"
                   required
                   minLength={8}
@@ -176,8 +177,9 @@ export default function ResetPasswordPage() {
                 />
               </div>
               <div>
-                <Label>もう一度入力</Label>
+                <Label htmlFor="confirm-password">もう一度入力</Label>
                 <Input
+                  id="confirm-password"
                   type="password"
                   required
                   minLength={8}
@@ -186,7 +188,11 @@ export default function ResetPasswordPage() {
                   onChange={(e) => setConfirm(e.target.value)}
                 />
               </div>
-              {err && <p className="text-sm text-red-600">{err}</p>}
+              {err && (
+                <p className="text-sm text-red-600" role="alert">
+                  {err}
+                </p>
+              )}
               <Button type="submit" className="w-full" disabled={busy}>
                 {busy && <Loader2 className="h-4 w-4 animate-spin" />} パスワードを変更
               </Button>

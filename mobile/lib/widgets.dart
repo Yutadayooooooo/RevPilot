@@ -62,6 +62,40 @@ class TopicChip extends StatelessWidget {
   }
 }
 
+/// 読み直しに失敗したときに、前回の内容の上に出す帯。
+///
+/// 一度読めた内容を、通信の失敗のたびに全画面のエラーへ置き換えない
+/// （何もしていないのに画面が消えたように見え、「アプリを追加」などのボタンも消えてしまう）。
+class StaleBanner extends StatelessWidget {
+  final String message;
+  final VoidCallback? onRetry;
+  const StaleBanner({super.key, required this.message, this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+      decoration: BoxDecoration(
+        color: AppTheme.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.wifi_off_rounded, size: 18, color: context.warningTextC),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(fontSize: 12.5, height: 1.5),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('再試行')),
+        ],
+      ),
+    );
+  }
+}
+
 /// 空状態の表示。
 class EmptyState extends StatelessWidget {
   final IconData icon;

@@ -66,11 +66,19 @@ void showErrorWithUpgrade(
 /// （テスト時に「App Storeが開くだけで何も起きない」状態になっていた）。
 /// シートを出せなかったときだけURLにフォールバックする。
 ///
+/// [store] は契約を請求しているストア（分からなければ null で、この端末のストア）。
+/// Google Play で契約した人が iPhone で開いたときなどは、この端末ではなくそのストアの
+/// 管理ページを開く（この端末のストアには契約が無く、解約できないため）。
+///
 /// 戻り値は、アプリ内のシートを表示して閉じたか（true なら、閉じた時点でプランを読み直すとよい）。
 /// 設定画面のアカウント削除など、課金画面の外からも使う。
-Future<bool> openSubscriptionManagement(BuildContext context) async {
+Future<bool> openSubscriptionManagement(
+  BuildContext context, {
+  BillingStore? store,
+}) async {
   HapticFeedback.lightImpact();
-  if (Platform.isIOS) {
+  final target = store ?? deviceBillingStore;
+  if (Platform.isIOS && target == BillingStore.apple) {
     try {
       final shown = await _subscriptionsChannel.invokeMethod<bool>(
             'showManageSubscriptions',
@@ -79,7 +87,7 @@ Future<bool> openSubscriptionManagement(BuildContext context) async {
       if (shown) return true;
     } catch (_) {}
   }
-  final uri = Platform.isIOS
+  final uri = target == BillingStore.apple
       ? Uri.parse('https://apps.apple.com/account/subscriptions')
       : Uri.parse('https://play.google.com/store/account/subscriptions');
   var ok = false;
@@ -91,6 +99,10 @@ Future<bool> openSubscriptionManagement(BuildContext context) async {
   }
   return false;
 }
+
+/// この端末で購入するときのストア（iOS は App Store、Android は Google Play）。
+BillingStore get deviceBillingStore =>
+    Platform.isIOS ? BillingStore.apple : BillingStore.google;
 
 /// ios/Runner/AppDelegate.swift のサブスク管理シート用チャンネル。
 const _subscriptionsChannel = MethodChannel('revpilot/subscriptions');
@@ -164,6 +176,9 @@ class _PlanScreenState extends State<PlanScreen> {
   String? _trialLine;
   bool _inTrial = false;
   DateTime? _periodEnd;
+
+  /// 今の有料プランを請求しているストア（分からなければ null）。
+  BillingStore? _store;
   bool _hasGooglePlay = false;
   bool _loading = true;
   bool _loaded = false;
@@ -210,9 +225,21 @@ class _PlanScreenState extends State<PlanScreen> {
     super.dispose();
   }
 
-  String get _manageLabel => Platform.isIOS
-      ? 'サブスクリプションを管理・解約'
-      : '定期購入を管理・解約（Google Play）';
+  /// 解約・変更の手続きをするストア（分からなければこの端末のストア）。
+  BillingStore get _manageStore => _store ?? deviceBillingStore;
+
+  /// 有料プランを、この端末とは別のストアで契約している
+  /// （Google Play で契約して iPhone で開いた、またはその逆）。
+  /// この端末で購入すると変更ではなく別の契約が新しく始まり、二重に請求されるので、
+  /// 変更・切り替えのボタンは出さず、契約したストアでの手続きを案内する。
+  bool get _otherStore =>
+      _plan != 'free' && _store != null && _store != deviceBillingStore;
+
+  String get _manageLabel => _manageStore == BillingStore.google
+      ? '定期購入を管理・解約（Google Play）'
+      : Platform.isIOS
+          ? 'サブスクリプションを管理・解約'
+          : 'サブスクリプションを管理・解約（App Store）';
 
   /// 次回の更新日（過ぎた日付は出さない）。
   DateTime? get _renewsAt {
@@ -243,6 +270,7 @@ class _PlanScreenState extends State<PlanScreen> {
         _trialLine = s.trialLine;
         _inTrial = s.trialLine != null;
         _periodEnd = s.periodEnd;
+        _store = s.store;
         _hasGooglePlay = gp;
         _loaded = true;
         _loadError = null;
@@ -421,6 +449,7 @@ class _PlanScreenState extends State<PlanScreen> {
     if (pending ||
         raw.contains('alreadyowned') ||
         raw.contains('already_owned')) {
+      final nav = Navigator.of(context);
       showSnack(
         context,
         pending
@@ -428,7 +457,11 @@ class _PlanScreenState extends State<PlanScreen> {
             : 'すでに購入済みです。「購入を復元」を押すと、プランに反映されます。',
         kind: SnackKind.error,
         actionLabel: '購入を復元',
-        onAction: _restore,
+        // スナックバーはアプリ全体で共有なので、この画面を閉じたあとにも押せる。
+        // そのときは課金画面を開き直して復元する（閉じた画面では購入の結果を受け取れない）。
+        onAction: () => mounted
+            ? _restore()
+            : openPlanScreen(nav.context, restore: true),
         duration: const Duration(seconds: 10),
       );
       return;
@@ -467,7 +500,7 @@ class _PlanScreenState extends State<PlanScreen> {
   /// 少し待っても届かなければ「見つからない」と伝える（何も起きないと壊れているように見える）。
   /// 届いたときは、サーバーでの確認が終わるまでスピナーを回したままにする。
   Future<void> _restore() async {
-    if (_busy != null) return;
+    if (!mounted || _busy != null) return;
     HapticFeedback.lightImpact();
     setState(() => _busy = 'restore');
     _restoreHits = 0;
@@ -650,7 +683,7 @@ class _PlanScreenState extends State<PlanScreen> {
 
   /// 解約・プラン管理。シートで解約・変更された可能性があるので、閉じたらプランを読み直す。
   Future<void> _manage() async {
-    final shown = await openSubscriptionManagement(context);
+    final shown = await openSubscriptionManagement(context, store: _store);
     if (shown && mounted) await _refresh();
   }
 
@@ -777,7 +810,9 @@ class _PlanScreenState extends State<PlanScreen> {
           OutlinedButton.icon(
             onPressed: _manage,
             icon: Icon(
-              Platform.isIOS ? Icons.manage_accounts : Icons.open_in_new,
+              Platform.isIOS && _manageStore == BillingStore.apple
+                  ? Icons.manage_accounts
+                  : Icons.open_in_new,
               size: 18,
             ),
             label: Text(_manageLabel),
@@ -1087,6 +1122,38 @@ class _PlanScreenState extends State<PlanScreen> {
                 ),
               ],
             ],
+            if (_otherStore) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: context.subtleC,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _store == BillingStore.google
+                          ? 'このご契約は Google Play で管理されています。'
+                              '変更・解約は Google Play から行えます。'
+                          : 'このご契約は App Store で管理されています。'
+                              '変更・解約は、ご契約の iPhone などの'
+                              '「設定 > 一番上のお名前 > サブスクリプション」から行えます。',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.5,
+                        color: context.inkC,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -1116,7 +1183,7 @@ class _PlanScreenState extends State<PlanScreen> {
     final subPeriod = isCurrent ? _sub?.period : null;
     if (subPeriod != null) period = subPeriod;
     final yearly = period == BillingPeriod.yearly;
-    final trial = !isCurrent && _trial(p, period);
+    final trial = !isCurrent && !_otherStore && _trial(p, period);
     final discount = yearly ? _discountPct(p) : null;
     final perMonth = yearly ? _monthlyEquivalent(p) : null;
     final price = _price(p, period);
@@ -1200,7 +1267,7 @@ class _PlanScreenState extends State<PlanScreen> {
               width: double.infinity,
               child: _planAction(p, isCurrent, trial),
             ),
-            if (!isCurrent && _iapReady) ...[
+            if (!isCurrent && _iapReady && !_otherStore) ...[
               const SizedBox(height: 6),
               _note(_buyNote(p, trial, price)),
             ],
@@ -1256,8 +1323,10 @@ class _PlanScreenState extends State<PlanScreen> {
               : (sub.period == BillingPeriod.yearly
                   ? BillingPeriod.monthly
                   : BillingPeriod.yearly);
-      final canSwitch =
-          other != null && _iapReady && _iap.hasPeriod(p.key, other);
+      final canSwitch = other != null &&
+          !_otherStore &&
+          _iapReady &&
+          _iap.hasPeriod(p.key, other);
       return Column(
         children: [
           SizedBox(
@@ -1280,7 +1349,8 @@ class _PlanScreenState extends State<PlanScreen> {
                       : Text('${_periodLabel(other)}に切り替える'),
             ),
             _note(_switchNote(p, other)),
-          ] else if (sub == null && _iapReady && Platform.isIOS) ...[
+          ] else if (sub == null &&
+              (_otherStore || (_iapReady && Platform.isIOS))) ...[
             const SizedBox(height: 6),
             _note('月額・年額の切り替えは、下の「$_manageLabel」から行えます。'),
           ],
@@ -1288,6 +1358,13 @@ class _PlanScreenState extends State<PlanScreen> {
       );
     }
 
+    // 別のストアの契約は、この端末からは変更できない（購入すると別の契約になる）。
+    if (_otherStore) {
+      return OutlinedButton(
+        onPressed: null,
+        child: Text('${_store!.label} で変更できます'),
+      );
+    }
     // 読み込み中は押せないまま待ってもらう（「ご利用いただけません」は出さない）。
     if (_iapLoading) {
       return const OutlinedButton(
@@ -1361,7 +1438,11 @@ class _PlanScreenState extends State<PlanScreen> {
                 TextButton(
                   onPressed: _manage,
                   child: Text(
-                    Platform.isIOS ? '解約手続き' : '解約手続き（Google Play）',
+                    _manageStore == BillingStore.google
+                        ? '解約手続き（Google Play）'
+                        : Platform.isIOS
+                            ? '解約手続き'
+                            : '解約手続き（App Store）',
                   ),
                 ),
             ],
@@ -1413,7 +1494,7 @@ class _PlanScreenState extends State<PlanScreen> {
   /// 自動更新サブスクの開示（Apple / Google の両ストアで必須の記載）。
   /// iOS 18 以降は「Apple ID」が「Apple アカウント」になり、設定の一番上は自分の名前になった。
   Widget _disclosure() {
-    final store = Platform.isIOS ? 'Apple アカウント' : 'Googleアカウント';
+    final store = Platform.isIOS ? 'Apple アカウント' : 'Google アカウント';
     final path =
         Platform.isIOS
             ? '「設定 > 一番上のお名前 > サブスクリプション」'
