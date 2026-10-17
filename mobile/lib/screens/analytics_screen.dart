@@ -41,6 +41,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   /// プランが変わったら false に戻す（契約した直後に1回だけ走らせたい）。
   bool _classifyAsked = false;
 
+  /// 今月のAI枠が足りず分類できなかった。案内を変えるために持つ
+  /// （黙って「自動で分類します」と出すと、起きないことを約束してしまう）。
+  bool _classifyOutOfQuota = false;
+
   @override
   void initState() {
     super.initState();
@@ -100,14 +104,19 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     if (summary == null || _classifyAsked || _classifying) return;
     if (!planDef(_plan).limits.topicAnalysis) return;
     if (summary.total == 0 || summary.topics.isNotEmpty) return;
+    // 分類はアカウント全体に対して走るので、絞り込み中の集計では判断しない
+    // （別のアプリのレビューを分類して、見ているカードは空のまま、になる）。
+    if (_filtered) return;
     if (!mounted) return;
     _classifyAsked = true;
     setState(() => _classifying = true);
+    var outOfQuota = false;
     try {
       // サーバーは1回あたりの件数を絞って返すので、残りがあれば続けて頼む。
       for (var round = 0; round < 3; round++) {
         final r = await Repo.backfillTopics();
-        if (r.classified == 0 || r.remaining == 0) break;
+        outOfQuota = r.quotaExhausted;
+        if (r.classified == 0 || r.remaining == 0 || outOfQuota) break;
       }
     } catch (_) {
       // 分類できなくても数字は出せる。カードは元の案内に戻るだけにする。
@@ -115,6 +124,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     if (!mounted) return;
     setState(() {
       _classifying = false;
+      _classifyOutOfQuota = outOfQuota;
       _applyScope();
     });
   }
@@ -526,14 +536,17 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text('保存済みのレビューを分類しています。少しお待ちください。',
+                      child: Text('保存済みのレビューを分類しています（AI利用枠を使います）。',
                           style:
                               TextStyle(color: context.subtleC, fontSize: 13)),
                     ),
                   ],
                 )
               else
-                Text('まだ分類されたレビューがありません。新しく届いたレビューから自動で分類します。',
+                Text(
+                    _classifyOutOfQuota
+                        ? '今月のAI利用枠を使い切ったため、分類を止めています。翌月1日にリセットされます。'
+                        : 'まだ分類されたレビューがありません。新しく届いたレビューから自動で分類します。',
                     style: TextStyle(color: context.subtleC, fontSize: 13)),
             ],
           ),

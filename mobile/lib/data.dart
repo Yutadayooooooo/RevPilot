@@ -429,16 +429,25 @@ class Repo {
   /// 分類は取り込みのときにしか走らず、そのときのプランが対象でなければ行われない。
   /// そのため Free で使っていた人が契約しても、トピック傾向は空のままになる。
   /// 分析タブはこれを呼んで、契約した直後から傾向が出るようにする。
-  /// 戻り値: 今回分類できた件数と、まだ分類できていない件数。
-  static Future<({int classified, int remaining})> backfillTopics() async {
+  ///
+  /// 戻り値: 今回分類できた件数、まだ手をつけていない件数、今月のAI枠が尽きたか。
+  /// remaining が残っていれば続きを頼める（サーバーは1回あたりの件数を絞っている）。
+  static Future<({int classified, int remaining, bool quotaExhausted})>
+      backfillTopics() async {
     final json = await _postApi(
       '/api/analytics/topics',
       {},
-      timeout: const Duration(seconds: 120), // 60件ぶんのAI分類で最大1分強かかる
+      // サーバー側の実行上限(120秒)より長く待つ。こちらが先に切ると、
+      // サーバーは分類を終えてAI枠を使っているのに、画面には失敗と出てしまう。
+      timeout: const Duration(seconds: 150),
     );
+    final classified = (json['classified'] as num?)?.toInt() ?? 0;
+    // トピックが付いたレビューは一覧でも表示が変わるので、他のタブにも知らせる。
+    if (classified > 0) AppEvents.notifyDataChanged(DataChange.reviews);
     return (
-      classified: (json['classified'] as num?)?.toInt() ?? 0,
+      classified: classified,
       remaining: (json['remaining'] as num?)?.toInt() ?? 0,
+      quotaExhausted: json['quotaExhausted'] == true,
     );
   }
 
