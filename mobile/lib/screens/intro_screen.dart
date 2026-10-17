@@ -62,21 +62,21 @@ class _IntroScreenState extends State<IntroScreen> {
   static const _pages = [
     _IntroPage(
       Icons.inventory_2_outlined,
-      'レビューを、消える前に\n全部残す',
-      'Google Play は直近7日ぶんのレビューしか返しません。'
-          'RevPilot が毎時取りに行き、App Store のぶんもまとめて保存します。',
+      'レビューを、\nすべて残しておく',
+      'Google Play が返すのは直近7日ぶんだけです。'
+          'RevPilot が毎時取りに行き、App Store のレビューとあわせて保存します。',
     ),
     _IntroPage(
       Icons.notifications_active_outlined,
-      '★1〜2は、\nすぐに気づける',
-      '低評価が届いたらプッシュ通知でお知らせ。'
-          '炎上する前に、気づいたその場で対応できます。',
+      '大事な声に、\n早く気づく',
+      '★1〜2のレビューが届いたら、プッシュ通知でお知らせします。'
+          '困っている利用者に、その日のうちに返せます。',
     ),
     _IntroPage(
       Icons.auto_awesome,
-      '返信文は、\nAIが下書き',
-      'レビューに合わせた返信案をAIが作ります。'
-          '挨拶や署名をアプリごとに決めておけば、どの返信も同じ調子にそろいます。',
+      '返信の下書きは、\nAIにまかせる',
+      'レビューの内容にあわせた返信案をAIが用意します。'
+          '挨拶や署名をアプリごとに決めておけば、文章の調子もそろいます。',
     ),
   ];
 
