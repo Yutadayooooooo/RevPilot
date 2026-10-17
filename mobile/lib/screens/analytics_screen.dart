@@ -34,6 +34,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   ReviewSummary? _last;
   String? _lastScope;
 
+  /// 保存済みレビューの分類をサーバーに頼んでいる最中か（カードに出す）。
+  bool _classifying = false;
+
+  /// この画面で一度頼んだか。AI枠を使う処理なので、画面の再読み込みでは繰り返さない。
+  /// プランが変わったら false に戻す（契約した直後に1回だけ走らせたい）。
+  bool _classifyAsked = false;
+
   @override
   void initState() {
     super.initState();
@@ -77,12 +84,45 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           _plan = p;
           _locked = locked;
         });
+        // プランが分かってから判断する（起動直後は Free 扱いで始まるため）。
+        _maybeClassify();
       }
     } catch (_) {}
   }
 
+  /// 有料プランなのに分類済みのレビューが1件も無ければ、保存済みのぶんを分類してもらう。
+  ///
+  /// 分類は取り込みのときにしか走らないので、Free のあいだに集めたレビューには
+  /// トピックが付いていない。契約した直後に「まだ分類されたレビューがありません」しか
+  /// 出ないのは、買った機能が動いていないのと見分けがつかないため、ここで埋め戻す。
+  Future<void> _maybeClassify() async {
+    final summary = _last;
+    if (summary == null || _classifyAsked || _classifying) return;
+    if (!planDef(_plan).limits.topicAnalysis) return;
+    if (summary.total == 0 || summary.topics.isNotEmpty) return;
+    if (!mounted) return;
+    _classifyAsked = true;
+    setState(() => _classifying = true);
+    try {
+      // サーバーは1回あたりの件数を絞って返すので、残りがあれば続けて頼む。
+      for (var round = 0; round < 3; round++) {
+        final r = await Repo.backfillTopics();
+        if (r.classified == 0 || r.remaining == 0) break;
+      }
+    } catch (_) {
+      // 分類できなくても数字は出せる。カードは元の案内に戻るだけにする。
+    }
+    if (!mounted) return;
+    setState(() {
+      _classifying = false;
+      _applyScope();
+    });
+  }
+
   /// 購入・復元・解約でプランが変わった。
   void _onPlanChanged() {
+    // 契約した直後は、まだ分類されていないレビューを埋め戻す必要がある。
+    _classifyAsked = false;
     _loadPlan();
     // 有料になると30日より前のレビューも集計に入る（範囲はサーバーの RLS で決まる）。
     if (mounted) setState(_applyScope);
@@ -103,6 +143,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     _future.then<void>((s) {
       _last = s;
       _lastScope = scope;
+      _maybeClassify();
     }, onError: (_) {});
   }
 
@@ -475,9 +516,25 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               const Text('トピック傾向',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              // アプリを追加したときに取り込んだ過去のレビューは分類しない（時間がかかるため）。
-              Text('まだ分類されたレビューがありません。新しく届いたレビューから自動で分類します。',
-                  style: TextStyle(color: context.subtleC, fontSize: 13)),
+              if (_classifying)
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text('保存済みのレビューを分類しています。少しお待ちください。',
+                          style:
+                              TextStyle(color: context.subtleC, fontSize: 13)),
+                    ),
+                  ],
+                )
+              else
+                Text('まだ分類されたレビューがありません。新しく届いたレビューから自動で分類します。',
+                    style: TextStyle(color: context.subtleC, fontSize: 13)),
             ],
           ),
         ),

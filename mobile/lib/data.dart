@@ -424,6 +424,24 @@ class Repo {
     }
   }
 
+  /// 保存済みレビューのうち、まだ分類されていないものをAIで分類させる（API）。
+  ///
+  /// 分類は取り込みのときにしか走らず、そのときのプランが対象でなければ行われない。
+  /// そのため Free で使っていた人が契約しても、トピック傾向は空のままになる。
+  /// 分析タブはこれを呼んで、契約した直後から傾向が出るようにする。
+  /// 戻り値: 今回分類できた件数と、まだ分類できていない件数。
+  static Future<({int classified, int remaining})> backfillTopics() async {
+    final json = await _postApi(
+      '/api/analytics/topics',
+      {},
+      timeout: const Duration(seconds: 120), // 60件ぶんのAI分類で最大1分強かかる
+    );
+    return (
+      classified: (json['classified'] as num?)?.toInt() ?? 0,
+      remaining: (json['remaining'] as num?)?.toInt() ?? 0,
+    );
+  }
+
   /// AI返信の生成（API）。生成文は replies に保存され本文が返る。
   static Future<String> generateAiReply(String reviewId) async {
     final json = await _postApi(
