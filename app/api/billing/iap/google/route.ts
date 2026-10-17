@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (existing && existing.id !== user.id) {
     return NextResponse.json(
-      { error: "この購入は別のアカウントで利用中です。購入時のGoogleアカウントに紐づくアカウントでログインしてください。" },
+      { error: "このGoogle アカウントでの購入は、別のRevPilotアカウントで使われています。購入したときと同じ方法でログインし直してください。" },
       { status: 409 }
     );
   }

@@ -1,12 +1,16 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 
+import 'app_events.dart';
 import 'config.dart';
 import 'data.dart';
 import 'local_notifications.dart';
+import 'notifications.dart';
+import 'ui.dart';
 
 /// アプリが起動していないときに届いた通知の処理。
 ///
@@ -32,7 +36,7 @@ class PushService {
   static bool _initialized = false;
   static String? _currentToken;
 
-  /// デバッグ表示用。初期化や登録に失敗した理由を残す。
+  /// 初期化や登録に失敗した理由（利用者に見せられる短い日本語）。
   static String? lastError;
 
   /// この端末でリモートpushを使える構成になっているか。
@@ -77,7 +81,14 @@ class PushService {
       );
 
       // Androidはフォアグラウンド中の通知をOSが表示しないので、自前で出す。
-      FirebaseMessaging.onMessage.listen(_showForeground);
+      FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+
+      // 通知のタップ。バックグラウンドからの復帰はストリームで、
+      // 終了中からの起動は getInitialMessage で届く。行き先はホーム画面がまとめて開く。
+      FirebaseMessaging.onMessageOpenedApp.listen(_openFrom);
+      unawaited(FirebaseMessaging.instance.getInitialMessage().then((m) {
+        if (m != null) _openFrom(m);
+      }).catchError((_) {}));
 
       // 端末側でトークンが再発行されることがある（再インストール・復元など）。
       // 追従しないと、その端末には二度と通知が届かなくなる。
@@ -88,37 +99,63 @@ class PushService {
 
       _initialized = true;
     } catch (e) {
-      lastError = '$e';
+      lastError = friendlyError(e);
       if (kDebugMode) debugPrint('[push] init failed: $e');
     }
   }
 
-  /// 通知の許可を求め、この端末を通知先として登録する。ログイン後に呼ぶ。
-  static Future<void> registerForCurrentUser() async {
+  /// OS の通知の許可状態（ダイアログは出さない）。Firebase を使えない構成では null。
+  static Future<AuthorizationStatus?> authorizationStatus() async {
     if (!_initialized) await init();
-    if (!_initialized) return;
+    if (!_initialized) return null;
+    try {
+      final settings = await FirebaseMessaging.instance.getNotificationSettings();
+      return settings.authorizationStatus;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// この端末を通知先として登録する。登録できたら true。
+  ///
+  /// [ask] が false（既定）なら OS のダイアログは出さず、すでに許可されているときだけ登録する。
+  /// 起動時・サインイン時はこちら。ここで許可を求めると、通知の説明で「あとで」を選んだ人にも
+  /// 次の起動で説明なしの OS ダイアログが出てしまう（一度断られると設定アプリからしか戻せない）。
+  /// [ask] を true にするのは、説明を見て「通知をオンにする」を選んだ直後だけ。
+  /// 失敗の理由は [lastError] に残る。
+  static Future<bool> registerForCurrentUser({bool ask = false}) async {
+    if (!_initialized) await init();
+    if (!_initialized) return false;
 
     lastError = null;
     try {
-      final settings = await FirebaseMessaging.instance.requestPermission();
-      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+      final messaging = FirebaseMessaging.instance;
+      final settings = ask
+          ? await messaging.requestPermission()
+          : await messaging.getNotificationSettings();
+      final status = settings.authorizationStatus;
+      if (status != AuthorizationStatus.authorized &&
+          status != AuthorizationStatus.provisional) {
         lastError = '通知が許可されていません';
-        return;
+        return false;
       }
 
       final token = await _obtainToken();
       if (token == null) {
-        lastError = Platform.isIOS &&
-                await FirebaseMessaging.instance.getAPNSToken() == null
-            ? 'APNsトークンを取得できませんでした'
-            : 'トークンを取得できませんでした';
-        return;
+        // 利用者には仕組みの名前（APNs・トークン）を出さず、何が起きたかだけを伝える。
+        lastError = 'この端末を通知先に登録できませんでした。しばらくしてからもう一度お試しください。';
+        if (kDebugMode) {
+          debugPrint('[push] no token'
+              '${Platform.isIOS && await messaging.getAPNSToken() == null ? ' (APNs token is null)' : ''}');
+        }
+        return false;
       }
       _currentToken = token;
-      await _register(token);
+      return await _register(token);
     } catch (e) {
-      lastError = '$e';
+      lastError = friendlyError(e);
       if (kDebugMode) debugPrint('[push] register failed: $e');
+      return false;
     }
   }
 
@@ -143,15 +180,17 @@ class PushService {
     return null;
   }
 
-  static Future<void> _register(String token) async {
+  static Future<bool> _register(String token) async {
     try {
       await Repo.registerPushToken(
         token: token,
         platform: Platform.isIOS ? 'ios' : 'android',
       );
+      return true;
     } catch (e) {
-      lastError = '$e';
+      lastError = friendlyError(e);
       if (kDebugMode) debugPrint('[push] token upload failed: $e');
+      return false;
     }
   }
 
@@ -168,8 +207,24 @@ class PushService {
     _currentToken = null;
   }
 
+  /// 通知をタップして開いたとき。
+  static void _openFrom(RemoteMessage message) {
+    NotifTap.open(NotifTarget.fromData(message.data) ?? const NotifTarget());
+  }
+
+  /// フォアグラウンドで受け取ったとき。
+  static Future<void> _onForegroundMessage(RemoteMessage message) async {
+    final target = NotifTarget.fromData(message.data);
+    // 新着レビューの通知＝サーバーが取り込んだ合図。開いているタブ・未読バッジを読み直させる。
+    if (target?.type == 'reviews') {
+      AppEvents.notifyDataChanged(DataChange.reviews);
+    }
+    await _showForeground(message, target);
+  }
+
   /// フォアグラウンド受信時の表示（Android向け）。
-  static Future<void> _showForeground(RemoteMessage message) async {
+  static Future<void> _showForeground(
+      RemoteMessage message, NotifTarget? target) async {
     if (!Platform.isAndroid) return; // iOSはOSが出す
     final n = message.notification;
     if (n == null) return;
@@ -177,6 +232,7 @@ class PushService {
       id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch,
       title: n.title ?? '新しいレビュー',
       body: n.body ?? '',
+      target: target,
     );
   }
 }

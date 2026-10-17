@@ -32,10 +32,15 @@ export async function POST(req: NextRequest) {
       apps: result.apps,
       skipped: result.skipped,
       failed: result.failed,
-      // 失敗の理由はユーザーが対処すべき情報（鍵の失効など）なのでそのまま返す
-      errors: result.errors.map((e) => e.message),
+      // 失敗の理由はユーザーが対処すべき情報（鍵の失効など）なので、どのアプリかと合わせて返す。
+      // message は apps.last_error と同じ短い日本語（ストアの生の応答はログにだけ残る）。
+      errors: result.errors.map((e) => ({ appId: e.appId, appName: e.appName, message: e.message })),
     });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: String(e?.message ?? e) }, { status: 500 });
+    console.error("[poll] manual poll failed", e);
+    return NextResponse.json(
+      { ok: false, error: "レビューの取得に失敗しました。時間をおいて再度お試しください。" },
+      { status: 500 }
+    );
   }
 }

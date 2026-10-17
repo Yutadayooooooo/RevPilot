@@ -16,9 +16,13 @@ import 'widgets.dart';
 /// アップグレードする理由も見えない。件数・星・日付ははっきり見せ、本文だけぼかして
 /// 「Proにすればここが読める」と一目で分かるようにする。
 class LockedReviewsTeaser extends StatelessWidget {
-  const LockedReviewsTeaser(this.preview, {super.key});
+  const LockedReviewsTeaser(this.preview, {super.key, this.acrossAllApps = false});
 
   final LockedPreview preview;
+
+  /// 件数は常に全アプリの合計。アプリやストアで絞り込んでいる画面では、
+  /// 「そのアプリにこれだけある」と誤解されないよう、全アプリの件数だと明記する。
+  final bool acrossAllApps;
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +45,7 @@ class LockedReviewsTeaser extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
+                  '${acrossAllApps ? '全アプリで' : ''}'
                   '$days日より前のレビューが ${preview.hiddenTotal}件 保存されています',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
@@ -51,10 +56,10 @@ class LockedReviewsTeaser extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               'うち★1〜2の低評価が ${preview.hiddenLow}件 あります',
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: AppTheme.danger),
+                  color: context.dangerTextC),
             ),
           ],
           const SizedBox(height: 12),
@@ -194,11 +199,11 @@ class LockedTopicsCard extends StatelessWidget {
                     color: AppTheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
                   ),
-                  child: const Text('Pro',
+                  child: Text('Pro',
                       style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: AppTheme.primary)),
+                          color: context.accentTextC)),
                 ),
               ],
             ),
@@ -231,7 +236,9 @@ class LockedTopicsCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.tonal(
-                onPressed: () => openPlanScreen(context),
+                // 見出しを「トピック分析」の話にして開く（履歴の話を出しても答えにならない）。
+                onPressed: () =>
+                    openPlanScreen(context, reason: PaywallReason.topics),
                 child: const Text('Proで分析を見る'),
               ),
             ),

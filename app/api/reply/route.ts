@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveApiAuth } from "@/lib/supabase/api-auth";
 import { draftReply } from "@/lib/ai";
-import { replyToGooglePlayReview } from "@/lib/googleplay";
+import { GOOGLE_PLAY_REPLY_MAX, replyToGooglePlayReview } from "@/lib/googleplay";
 import { replyToAppStoreReview } from "@/lib/appstore";
 import { AI_UNITS } from "@/lib/plan";
 import { QuotaError, refundAiUnits, reserveAiUnits, takeRateToken } from "@/lib/quota";
@@ -9,6 +9,13 @@ import { loadCredentials, type GooglePlayCreds, type AppStoreCreds } from "@/lib
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
+
+/*
+ * Google Play の返信の上限（GOOGLE_PLAY_REPLY_MAX = 350）は投稿の前にここで確かめる。
+ * lib/googleplay.ts も超えた本文は投げて断るが、ここで先に断れば AI の生成文を下書きとして
+ * 残したうえで、短くするよう案内できる。
+ * 数え方は UTF-16 の長さ（String.length）。アプリの文字数表示も同じ数え方。
+ */
 
 /**
  * POST /api/reply
@@ -24,14 +31,19 @@ export async function POST(req: NextRequest) {
   const { user, db } = auth;
 
   const { reviewId, action = "draft", text } = await req.json();
-  if (!reviewId) return NextResponse.json({ error: "reviewId required" }, { status: 400 });
+  if (!reviewId) return NextResponse.json({ error: "レビューが指定されていません。" }, { status: 400 });
 
   const { data: review, error } = await db
     .from("reviews")
     .select("id, store, external_id, rating, title, body, territory, apps!inner(*)")
     .eq("id", reviewId)
     .single();
-  if (error || !review) return NextResponse.json({ error: "review not found" }, { status: 404 });
+  if (error || !review) {
+    return NextResponse.json(
+      { error: "レビューが見つかりませんでした。画面を更新してから再度お試しください。" },
+      { status: 404 }
+    );
+  }
 
   const app = (review as any).apps;
   const { data: profile } = await db.from("profiles").select("plan").eq("id", user.id).maybeSingle();
@@ -93,6 +105,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (review.store === "googleplay" && body.length > GOOGLE_PLAY_REPLY_MAX) {
+      // 渡された本文は利用者の手元に残っている。生成した本文だけは下書きとして残す（AI枠を無駄にしない）。
+      if (usedAi) {
+        await db.from("replies").insert({ review_id: reviewId, body, status: "draft", source: "ai" });
+      }
+      return NextResponse.json(
+        {
+          error: `Google Playの返信は${GOOGLE_PLAY_REPLY_MAX}文字までです（現在${body.length}文字）。短くしてから投稿してください。`,
+        },
+        { status: 400 }
+      );
+    }
+
     try {
       if (review.store === "googleplay") {
         const gpCreds =
@@ -134,5 +159,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, posted: true });
   }
 
-  return NextResponse.json({ error: "unknown action" }, { status: 400 });
+  return NextResponse.json({ error: "この操作には対応していません。" }, { status: 400 });
 }

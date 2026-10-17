@@ -45,7 +45,7 @@ export default function TermsPage() {
         </li>
         <li>
           解約は次回更新日の24時間前までにいつでも可能で、解約後は当該課金期間の終了まで
-          有料機能を利用できます。解約手続きは、iOS は「設定 &gt; Apple ID &gt; サブスクリプション」、
+          有料機能を利用できます。解約手続きは、iOS は「設定 &gt; 一番上のお名前 &gt; サブスクリプション」、
           Android は Google Play ストアの「お支払いと定期購入 &gt; 定期購入」から行います。
         </li>
         <li>
@@ -131,7 +131,7 @@ export default function TermsPage() {
         本規約に関するお問い合わせは {BUSINESS.email} までご連絡ください。
       </P>
 
-      <LegalFooter updated="2026年10月11日" />
+      <LegalFooter updated="2026年10月15日" />
     </>
   );
 }

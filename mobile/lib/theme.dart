@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -21,6 +22,15 @@ class AppTheme {
   static const surfaceDark = Color(0xFF1E293B); // slate-800
   static const inkDark = Color(0xFFE2E8F0); // slate-200
   static const borderDark = Color(0xFF334155); // slate-700
+
+  // 補助テキスト。小さい文字でも背景とのコントラスト 4.5:1 を満たす濃さにしてある
+  // （ライトは白・薄い面・12%の色付きバッジ上でも 4.6 以上）。
+  static const subtle = Color(0xFF5B6B80);
+  static const subtleDark = Color(0xFF94A3B8); // slate-400
+
+  // 文字・バッジ用のアクセント（primary のままだと小さい文字で 4.5:1 に届かない）。
+  static const accentText = primaryLight; // indigo-600
+  static const accentTextDark = Color(0xFFA5B4FC); // indigo-300
 
   static const _overlayLight = SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -50,7 +60,8 @@ class AppTheme {
     final surfaceC = dark ? surfaceDark : surface;
     final inkC = dark ? inkDark : ink;
     final borderC = dark ? borderDark : border;
-    final subtle = dark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final subtle = dark ? subtleDark : AppTheme.subtle;
+    final accent = dark ? accentTextDark : accentText;
     final overlay = dark ? _overlayDark : _overlayLight;
 
     final scheme = ColorScheme.fromSeed(
@@ -62,8 +73,10 @@ class AppTheme {
       onSurface: inkC,
     );
 
+    // iOS は左端からのスワイプで戻れる Cupertino の遷移にする
+    // （FadeForwards には戻るジェスチャーが無く、毎回左上の戻るボタンを押す必要があった）。
     const transitions = PageTransitionsTheme(builders: {
-      TargetPlatform.iOS: FadeForwardsPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
       TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
     });
 
@@ -123,18 +136,22 @@ class AppTheme {
           return TextStyle(
             fontSize: 11,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? primary : subtle,
+            color: selected ? accent : subtle,
           );
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
-          return IconThemeData(color: selected ? primary : subtle);
+          return IconThemeData(color: selected ? accent : subtle);
         }),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: dark ? const Color(0xFF334155) : ink,
         contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+        // 操作ボタン（「元に戻す」「再試行」など）の文字色。既定の inversePrimary は
+        // ダークの背景上で約 1.6:1 しかなく読めないので、どちらの背景でも 4.5:1 以上の色にする。
+        actionTextColor: accentTextDark,
+        closeIconColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         insetPadding: const EdgeInsets.all(16),
       ),
@@ -203,13 +220,35 @@ extension AppColors on BuildContext {
   Color get inkC => isDark ? AppTheme.inkDark : AppTheme.ink;
   Color get borderC => isDark ? AppTheme.borderDark : AppTheme.border;
 
-  /// 補助テキスト（旧 Colors.grey.shade600 相当）。
-  Color get subtleC =>
-      isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  /// 補助テキスト（旧 Colors.grey / grey.shade500 / grey.shade600 の置き換え先）。
+  /// 日付・状態・注意書きなど、意味のある小さい文字はこれを使う（4.5:1 以上）。
+  Color get subtleC => isDark ? AppTheme.subtleDark : AppTheme.subtle;
 
-  /// さらに薄い装飾テキスト（旧 grey.shade500）。
+  /// 装飾専用の薄い色（区切り・飾りのアイコン）。
+  /// 白地で約 2.6:1 しかないので、読ませたい文字やアイコンには使わず subtleC を使う。
   Color get faintC =>
       isDark ? const Color(0xFF64748B) : const Color(0xFF94A3B8);
+
+  /// 文字・バッジ用の状態色。AppTheme.success / warning / danger は塗り・アイコン向けで、
+  /// 小さい文字に使うと 4.5:1 に届かない。こちらは面（surface / bg）上でも、
+  /// 同じ色を 12% 重ねたバッジの背景上でも読める濃さにしてある。
+  Color get successTextC =>
+      isDark ? const Color(0xFF4ADE80) : const Color(0xFF166534);
+  Color get warningTextC =>
+      isDark ? const Color(0xFFFBBF24) : const Color(0xFF92400E);
+  Color get dangerTextC =>
+      isDark ? const Color(0xFFF87171) : const Color(0xFFB91C1C);
+
+  /// 文字・バッジ用のアクセント（リンク風の文字、トピックのチップなど）。
+  Color get accentTextC =>
+      isDark ? AppTheme.accentTextDark : AppTheme.accentText;
+
+  /// 星評価の色を文字に使うとき（「★3」のような小さい文字）。
+  Color ratingTextC(int rating) {
+    if (rating >= 4) return successTextC;
+    if (rating == 3) return warningTextC;
+    return dangerTextC;
+  }
 
   /// プログレスバー等のトラック色。
   Color get trackC =>

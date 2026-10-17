@@ -11,6 +11,12 @@ import type { GooglePlayCreds } from "./credentials";
  * - 返信は reviews.reply で自動投稿可能（本文350字以内）。
  */
 
+/**
+ * Google Play の返信の上限（文字数）。数え方は String.length（UTF-16）。
+ * app/api/reply の事前チェック・アプリの文字数表示と同じ数え方にそろえている。
+ */
+export const GOOGLE_PLAY_REPLY_MAX = 350;
+
 const SCOPE = "https://www.googleapis.com/auth/androidpublisher";
 const API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications";
 
@@ -126,8 +132,9 @@ export async function fetchGooglePlayReviews(
 
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (res.status === 401 || res.status === 403) {
+      // 画面では「アプリ名：理由」の形で出るので、パッケージ名は入れずに短くする（apps.last_error）。
       throw new Error(
-        `「${packageName}」のレビューを読む権限がありません。Play Console の「ユーザーと権限」をご確認ください。`
+        "サービスアカウントにレビューを読む権限がありません。Play Console の「ユーザーと権限」をご確認ください。"
       );
     }
     if (!res.ok) throw new Error(`GooglePlay ${res.status}: ${await res.text()}`);
@@ -141,13 +148,23 @@ export async function fetchGooglePlayReviews(
   return out;
 }
 
-/** レビューに自動返信（Androidのみ可）。本文は350字以内。 */
+/**
+ * レビューに自動返信（Androidのみ可）。本文は350字以内。
+ *
+ * 上限を超える本文は投稿せずにエラーにする。以前は先頭350字に黙って切って投稿していたため、
+ * 文の途中で切れた返信が公開され、アプリには全文が「投稿済み」として残っていた。
+ */
 export async function replyToGooglePlayReview(
   packageName: string,
   reviewId: string,
   replyText: string,
   creds?: GooglePlayCreds
 ): Promise<void> {
+  if (replyText.length > GOOGLE_PLAY_REPLY_MAX) {
+    throw new Error(
+      `Google Playの返信は${GOOGLE_PLAY_REPLY_MAX}文字までです（現在${replyText.length}文字）。短くしてから投稿してください。`
+    );
+  }
   if (!creds) {
     throw new Error("Google Play の認証情報が未登録です。設定 > ストア連携から登録してください。");
   }
@@ -156,7 +173,7 @@ export async function replyToGooglePlayReview(
   const res = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ replyText: replyText.slice(0, 350) }),
+    body: JSON.stringify({ replyText }),
   });
   if (!res.ok) throw new Error(`GooglePlay reply ${res.status}: ${await res.text()}`);
 }

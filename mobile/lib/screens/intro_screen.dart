@@ -33,6 +33,17 @@ class IntroScreen extends StatefulWidget {
     } catch (_) {}
   }
 
+  /// 紹介を見終えた直後か。このあとのログイン画面を「新規登録」から始めるのに使う
+  /// （紹介を見た＝はじめての人なので、ログインから始めると英語のエラーで迷わせてしまう）。
+  static bool _justFinished = false;
+
+  /// 一度読んだら false に戻す（ログアウトしたあとのログイン画面まで新規登録にしない）。
+  static bool takeJustFinished() {
+    final v = _justFinished;
+    _justFinished = false;
+    return v;
+  }
+
   @override
   State<IntroScreen> createState() => _IntroScreenState();
 }
@@ -80,6 +91,7 @@ class _IntroScreenState extends State<IntroScreen> {
   Future<void> _finish() async {
     HapticFeedback.lightImpact();
     await IntroScreen.markSeen();
+    IntroScreen._justFinished = true;
     widget.onDone();
   }
 

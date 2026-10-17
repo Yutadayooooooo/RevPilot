@@ -20,7 +20,7 @@ export const runtime = "nodejs";
  *
  * 【Apple IAP について】
  * App内課金のサブスクリプションは Apple の管理下にあり、サーバーからは解約できない。
- * 利用者には「設定 > Apple ID > サブスクリプション」から解約するようUI側で案内している
+ * 利用者には「設定 > 一番上のお名前 > サブスクリプション」から解約するようUI側で案内している
  * （mobile/lib/screens/settings_screen.dart, components/danger-zone.tsx）。
  */
 export async function DELETE(req: NextRequest) {
