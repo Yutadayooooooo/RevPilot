@@ -76,7 +76,7 @@ class _IntroScreenState extends State<IntroScreen> {
       Icons.auto_awesome,
       '返信の下書きは、\nAIにまかせる',
       'レビューの内容にあわせた返信案をAIが用意します。'
-          '挨拶や署名をアプリごとに決めておけば、文章の調子もそろいます。',
+          '挨拶や署名をアプリごとに決めておけば、返信の文体もそろいます。',
     ),
   ];
 
