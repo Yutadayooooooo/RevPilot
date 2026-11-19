@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../motion.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme.dart';
@@ -206,7 +207,7 @@ class _IntroPageView extends StatelessWidget {
                 ),
                 child: Icon(page.icon, size: 60, color: AppTheme.primary),
               )
-              .animate()
+              .motion(context)
               .fadeIn(duration: 300.ms)
               .scale(
                 begin: const Offset(0.85, 0.85),
@@ -222,7 +223,7 @@ class _IntroPageView extends StatelessWidget {
               height: 1.35,
               fontWeight: FontWeight.w800,
             ),
-          ).animate().fadeIn(delay: 80.ms, duration: 300.ms).slideY(
+          ).motion(context).fadeIn(delay: 80.ms, duration: 300.ms).slideY(
                 begin: 0.1,
                 end: 0,
               ),
@@ -231,7 +232,7 @@ class _IntroPageView extends StatelessWidget {
             page.body,
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 15, height: 1.7, color: context.subtleC),
-          ).animate().fadeIn(delay: 160.ms, duration: 300.ms),
+          ).motion(context).fadeIn(delay: 160.ms, duration: 300.ms),
         ],
       ),
     );

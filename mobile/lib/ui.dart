@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'motion.dart';
 import 'package:http/http.dart' as http;
 import 'package:in_app_purchase/in_app_purchase.dart' show IAPError;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -244,7 +245,7 @@ class ReviewListSkeleton extends StatelessWidget {
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (_, __) => const _SkeletonCard(),
     )
-        .animate(onPlay: (c) => c.repeat())
+        .motion(context, onPlay: (c) => c.repeat())
         .shimmer(
           duration: 1100.ms,
           // ダークでは白60%だとまぶしい帯になるので、ごく薄くする。

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../motion.dart';
 
 import '../app_events.dart';
 import '../data.dart';
@@ -264,7 +265,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   }
                   var i = 0;
                   Widget staggered(Widget child) => child
-                      .animate(delay: (80 * i++).ms)
+                      .motion(context, delay: (80 * i++).ms)
                       .fadeIn(duration: 300.ms);
                   return ListView(
                     // scope切替時にアニメを作り直し、バーの伸びを見せる
@@ -575,7 +576,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     backgroundColor: AppTheme.primary.withValues(alpha: 0.06),
                     side: BorderSide.none,
                   )
-                      .animate(delay: (300 + 60 * k).ms)
+                      .motion(context, delay: (300 + 60 * k).ms)
                       .fadeIn(duration: 220.ms)
                       .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1)),
               ],
@@ -688,7 +689,7 @@ class _AnalyticsSkeleton extends StatelessWidget {
         const SizedBox(height: 16),
         card(120),
       ],
-    ).animate(onPlay: (c) => c.repeat()).shimmer(
+    ).motion(context, onPlay: (c) => c.repeat()).shimmer(
           duration: 1100.ms,
           // ダークでは白60%だとまぶしい帯になるので、ごく薄くする。
           color: Colors.white.withValues(alpha: context.isDark ? 0.08 : 0.6),

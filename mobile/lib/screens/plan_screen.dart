@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
@@ -14,6 +13,9 @@ import '../plan_catalog.g.dart';
 import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
+import 'package:intl/intl.dart';
+import '../format.dart';
+import '../telemetry.dart';
 
 /// どの「壁」から課金画面を開いたか。画面上部の見出しをその理由に合わせる。
 ///
@@ -116,7 +118,7 @@ int _rankOf(String plan) => _planRank[plan] ?? 0;
 
 String _periodLabel(BillingPeriod p) => p == BillingPeriod.yearly ? '年額' : '月額';
 
-String _md(DateTime d) => DateFormat('M月d日').format(d.toLocal());
+String _md(DateTime d) => formatDateJa(d);
 
 /// プランの確認・変更。
 ///
@@ -314,7 +316,8 @@ class _PlanScreenState extends State<PlanScreen> {
         onCanceled: _onPurchaseCanceled,
         onPending: _onPurchasePending,
       );
-    } catch (e) {
+    } catch (e, st) {
+      Telemetry.recordError(e, st, reason: 'iap init');
       _iap.lastError = '$e';
     }
     if (!mounted) return;
@@ -430,6 +433,7 @@ class _PlanScreenState extends State<PlanScreen> {
   }
 
   void _onPurchaseError(Object error) {
+    Telemetry.recordError(error, StackTrace.current, reason: 'iap purchase');
     _settle();
     if (mounted) _showPurchaseError(error);
   }
@@ -487,7 +491,8 @@ class _PlanScreenState extends State<PlanScreen> {
     try {
       await _iap.buy(plan, period);
       // 結果は購入ストリーム（_onPurchased / キャンセル / 承認待ち / 失敗）に届く。
-    } catch (e) {
+    } catch (e, st) {
+      Telemetry.recordError(e, st, reason: 'iap buy');
       if (!mounted) return;
       _settle();
       _showPurchaseError(e);
@@ -508,7 +513,8 @@ class _PlanScreenState extends State<PlanScreen> {
       await _iap.restore();
       // iOS は restore() から戻った少し後に結果が届く。
       await Future<void>.delayed(const Duration(seconds: 2));
-    } catch (e) {
+    } catch (e, st) {
+      Telemetry.recordError(e, st, reason: 'iap restore');
       if (!mounted) return;
       _settle();
       showSnack(

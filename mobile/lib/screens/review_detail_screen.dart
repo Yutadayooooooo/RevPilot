@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:intl/intl.dart';
+import '../motion.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app_events.dart';
@@ -13,6 +13,8 @@ import '../models.dart';
 import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
+import 'package:intl/intl.dart';
+import '../format.dart';
 
 class ReviewDetailScreen extends StatefulWidget {
   final ReviewRow review;
@@ -421,7 +423,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
   Widget build(BuildContext context) {
     final r = _review;
     final date = r.reviewedAt != null
-        ? DateFormat('yyyy年M月d日').format(r.reviewedAt!)
+        ? formatDateJa(r.reviewedAt!)
         : '';
     final replied = r.repliedReply;
     return PopScope(
@@ -448,7 +450,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                     Row(
                       children: [
                         StarRating(r.rating, size: 20)
-                            .animate()
+                            .motion(context)
                             .scale(
                               begin: const Offset(0.7, 0.7),
                               end: const Offset(1, 1),
@@ -502,7 +504,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                   ],
                 ),
               ),
-            ).animate().fadeIn(duration: 260.ms).slideY(
+            ).motion(context).fadeIn(duration: 260.ms).slideY(
                 begin: 0.04, end: 0, curve: Curves.easeOut),
             if (replied != null) ...[
               const SizedBox(height: 16),
@@ -530,7 +532,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                   Text('AI生成はサーバー接続後に有効',
                       style: TextStyle(fontSize: 11, color: context.subtleC)),
               ],
-            ).animate(delay: 120.ms).fadeIn(duration: 240.ms),
+            ).motion(context, delay: 120.ms).fadeIn(duration: 240.ms),
             if (AppConfig.hasApi && _aiLeft != null) _aiLeftLine(),
             const SizedBox(height: 8),
             Stack(
@@ -558,7 +560,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       )
-                          .animate(onPlay: (c) => c.repeat())
+                          .motion(context, onPlay: (c) => c.repeat())
                           .shimmer(
                             duration: 1000.ms,
                             color: AppTheme.primary.withValues(alpha: 0.10),
@@ -566,7 +568,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                     ),
                   ),
               ],
-            ).animate(delay: 180.ms).fadeIn(duration: 240.ms).slideY(
+            ).motion(context, delay: 180.ms).fadeIn(duration: 240.ms).slideY(
                 begin: 0.05, end: 0, curve: Curves.easeOut),
             if (AppConfig.hasApi)
               Align(
@@ -603,7 +605,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                   ),
                 ),
               ],
-            ).animate(delay: 240.ms).fadeIn(duration: 240.ms),
+            ).motion(context, delay: 240.ms).fadeIn(duration: 240.ms),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
@@ -620,7 +622,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
                 label: Text(
                     r.isPosted ? '返信を更新して投稿' : '$_storeLabelに投稿'),
               ),
-            ).animate(delay: 300.ms).fadeIn(duration: 240.ms),
+            ).motion(context, delay: 300.ms).fadeIn(duration: 240.ms),
             if (r.store == 'appstore') ...[
               const SizedBox(height: 10),
               OutlinedButton.icon(
@@ -664,7 +666,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
 
   /// ストアで返信済みの内容。何がいつ公開されたかを、編集欄とは別に読み取り専用で出す。
   Widget _repliedBanner(ReplyRow done) {
-    final when = DateFormat('M月d日 H:mm').format(done.repliedAt);
+    final when = formatDateTimeJa(done.repliedAt);
     final title = done.isCopied
         ? '$_storeLabelで返信済み（手動で記録）'
         : '$_storeLabelに投稿済み';
@@ -705,7 +707,7 @@ class _ReviewDetailScreenState extends State<ReviewDetailScreen> {
           ],
         ],
       ),
-    ).animate().fadeIn(duration: 240.ms);
+    ).motion(context).fadeIn(duration: 240.ms);
   }
 
   Widget _meta(IconData icon, String text) {

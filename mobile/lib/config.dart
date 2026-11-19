@@ -42,6 +42,11 @@ class AppConfig {
   static const googleIosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID',
       defaultValue: '853072258337-89nupbh95o5fujt334dl7kojercar765.apps.googleusercontent.com');
 
+  /// App Store Connect の Apple ID（数字。アプリの情報 › 一般情報 にある）。
+  /// アップデートのお願いの画面から App Store を開くのに使う。
+  /// 空なら Remote Config の `ios_store_url` を使い、それも空ならボタンを出さない。
+  static const appStoreId = String.fromEnvironment('APP_STORE_ID');
+
   /// iOSのバンドルID。Firebaseに登録したiOSアプリと一致させる。
   static const iosBundleId = 'jp.revpilot.app';
 

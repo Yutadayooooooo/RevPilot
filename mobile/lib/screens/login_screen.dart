@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../motion.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -410,7 +411,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontSize: 24, fontWeight: FontWeight.bold)),
                     ],
                   )
-                      .animate()
+                      .motion(context)
                       .fadeIn(duration: 400.ms)
                       .scale(
                           begin: const Offset(0.85, 0.85),

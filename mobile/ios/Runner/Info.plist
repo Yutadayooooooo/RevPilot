@@ -14,6 +14,14 @@
 	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
+		<!--
+	  アプリの言語は日本語だけ。これが無いと App Store の「言語」が「英語」と表示され、
+	  写真・ファイルの選択や共有シートなど OS が出す画面も端末の言語どおりに英語で出る。
+	-->
+		<key>CFBundleLocalizations</key>
+		<array>
+			<string>ja</string>
+		</array>
 		<key>CFBundleDisplayName</key>
 		<string>RevPilot</string>
 		<key>CFBundleExecutable</key>
