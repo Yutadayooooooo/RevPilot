@@ -49,11 +49,17 @@ dependencies:
   # 低評価レビューのOSバナー通知（ローカル通知。リモートpushと違いApple Developer登録不要）
   flutter_local_notifications: ^18.0.1
   firebase_core: ^4.14.0
-  firebase_messaging: ^16.7.0
+  firebase_messaging: ^16.7.1
   sign_in_with_apple: ^8.2.0
   google_sign_in: ^7.2.0
   crypto: ^3.0.7
   file_picker: ^13.1.0
+  firebase_crashlytics: ^5.4.1
+  firebase_remote_config: ^6.7.1
+  connectivity_plus: ^7.3.1
+  package_info_plus: ^10.2.2
+  flutter_localizations:
+    sdk: flutter
 dev_dependencies:
   flutter_test:
     sdk: flutter

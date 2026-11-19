@@ -844,6 +844,36 @@ cd mobile && flutter build ios --release --dart-define-from-file=config/app_conf
 
 ---
 
+### 5-6. クラッシュの収集とアップデートのお願い（Crashlytics・Remote Config）
+
+アプリは Firebase の初期化のあとに、次の 2 つを使う（どちらも Firebase の設定が無い構成では何もしない）。
+
+**Crashlytics**（`mobile/lib/telemetry.dart`）
+- Firebase コンソール > Crashlytics を開き、「Crashlytics を有効にする」を押す（初回だけ）。
+- 開発版（debug）では送らない。release / TestFlight のビルドから届く。
+- 送るのはクラッシュの記録と、ログイン中の利用者の ID だけ（本文やメールアドレスは送らない）。
+- これに合わせて、App Store Connect の App のプライバシーの「クラッシュデータ」（用途: アプリの機能、紐づけ: はい、トラッキング: いいえ）は**実態どおりになる**。
+  「パフォーマンスデータ」「その他の診断データ」「その他の使用状況データ」は引き続き収集していないので外す。
+- Android は Crashlytics の Gradle プラグインを使わない（google-services.json を置かない作りのため）。代わりに
+  `android/app/src/main/res/values/crashlytics.xml` でビルド ID を必須にしていない。Dart の例外の記録には影響しない。
+- iOS の dSYM（ネイティブのクラッシュの読み解きに使う）を自動で上げるには、Xcode の Runner の Build Phases に
+  FlutterFire の `upload-symbols` を足す（Dart の例外は dSYM なしでも読める。後回しでよい）。
+
+**Remote Config**（`mobile/lib/app_update.dart`）
+- Firebase コンソール > Remote Config で、次のキーを（空の値で）作っておく。値を入れるとすぐ全端末に届く。
+
+| キー | 入れる値の例 | 効き目 |
+|---|---|---|
+| `ios_min_version` / `android_min_version` | `1.0.1` | これより古い版はアプリ全体をふさぎ、アップデートを求める |
+| `ios_latest_version` / `android_latest_version` | `1.1.0` | これより古い版に、起動時に 1 回だけアップデートをすすめる |
+| `update_message` | `購入の不具合を直しました` | 上の 2 つの画面に添える一言 |
+| `maintenance_message` | `11月20日 3:00ごろまでメンテナンスです` | 空でなければアプリ全体をメンテナンスの画面でふさぐ |
+| `ios_store_url` | `https://apps.apple.com/jp/app/id1234567890` | App Store を開く先（`APP_STORE_ID` を設定に入れたなら不要） |
+
+- 空や版の形でない値は「求めない」扱いなので、誤って入れてもアプリは止まらない。
+- `config/app_config.prod.json` に `"APP_STORE_ID": "<App Store Connect の Apple ID（数字）>"` を足すと、
+  アップデートの画面の「アップデートする」が App Store のページを開く（無いとボタンを出さない）。
+
 ## 6. Android（Google Play）
 
 > この章の画面は未確認です（Play Console 未登録のため）。項目名が違う場合は近い語を探してください。
@@ -1183,6 +1213,8 @@ Android では内部テスターアカウントでご確認いただけます。
 
 ### アプリ
 - [ ] リリースビルドに `config/app_config.prod.json` を指定した（開発用と取り違えていない）
+- [ ] Firebase コンソールで Crashlytics を有効にし、Remote Config のキーを作った（5-6）
+- [ ] `config/app_config.prod.json` に `APP_STORE_ID` を足した（5-6）
 - [ ] `pubspec.yaml` のビルド番号を上げた
 - [ ] 実機で「購入 → プランが変わる → ストアで解約 → 数分後にFreeへ戻る」を通した
 - [ ] 掲載文と実装が一致している（`docs/store-listing.md` の「書かないこと」を確認）

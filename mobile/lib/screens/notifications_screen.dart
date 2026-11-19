@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../app_events.dart';
 import '../data.dart';
@@ -9,6 +8,7 @@ import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
 import 'review_detail_screen.dart';
+import '../format.dart';
 
 /// アプリ内通知フィード。運営からのお知らせ＋通知対象のレビューを新しい順に表示する。
 /// 対象（すべて / ★1〜2のみ）は設定タブの「通知」で切り替える。
@@ -268,7 +268,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Widget _reviewCard(BuildContext context, ReviewRow r) {
     final storeLabel = r.store == 'appstore' ? 'App Store' : 'Google Play';
-    final date = r.reviewedAt != null ? DateFormat('M/d HH:mm').format(r.reviewedAt!) : '';
+    final date = r.reviewedAt != null ? formatListDateTime(r.reviewedAt!) : '';
     final opening = _openingId == r.id;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Crashlytics の Gradle プラグイン（google-services.json と Google-Services プラグインが前提）を使わない。
+      Firebase は Dart 側で FirebaseOptions を渡して初期化しているため、google-services.json を置いていない。
+      プラグインが無いとビルド ID が埋め込まれず、既定では起動時に
+      「The Crashlytics build ID is missing」で落ちるので、ビルド ID を必須にしない。
+      記録するのは Dart の例外なので、ビルド ID と難読化の対応表は無くても読める。
+    -->
+    <bool name="com.crashlytics.RequireBuildId">false</bool>
+</resources>

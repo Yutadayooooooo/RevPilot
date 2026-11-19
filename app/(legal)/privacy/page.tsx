@@ -89,6 +89,12 @@ export default function PrivacyPage() {
           端末の通知トークンと通知本文（アプリ名・評価・レビュー本文の冒頭）を送信します。
         </li>
         <li>
+          <strong>Firebase Crashlytics / Remote Config（Google）</strong>：アプリの不具合を直すため、
+          アプリが異常終了したときの記録（エラーの内容・端末の機種・OS とアプリのバージョン）と
+          利用者IDを送信します。レビュー本文やメールアドレスは送信しません。また、アップデートや
+          メンテナンスのお知らせを出すため、アプリの設定値を取得します。
+        </li>
+        <li>
           <strong>Slack / Discord</strong>：利用者が通知先としてWebhook URLを設定した場合に限り、
           新着レビューの概要を当該サービスへ送信します。
         </li>

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../motion.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -774,7 +775,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ],
     )
-        .animate()
+        .motion(context)
         .fadeIn(duration: 300.ms)
         .slideY(begin: 0.03, end: 0, curve: Curves.easeOut);
   }

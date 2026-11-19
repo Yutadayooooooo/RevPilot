@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 
 import '../app_events.dart';
 import '../data.dart';
@@ -10,6 +9,7 @@ import '../models.dart';
 import '../theme.dart';
 import '../ui.dart';
 import '../widgets.dart';
+import '../format.dart';
 
 /// 「12分前」のような最終取得の表示。1日以上前は日時にする。
 String fetchedAgo(DateTime at) {
@@ -18,7 +18,7 @@ String fetchedAgo(DateTime at) {
   if (d.inMinutes < 1) return 'たった今';
   if (d.inMinutes < 60) return '${d.inMinutes}分前';
   if (d.inHours < 24) return '${d.inHours}時間前';
-  return DateFormat('M月d日 H:mm').format(local);
+  return formatDateTimeJa(local);
 }
 
 /// 連携アプリの一覧・追加・編集・削除。

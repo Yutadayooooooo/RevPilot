@@ -2,12 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_events.dart';
+import 'app_update.dart';
 import 'config.dart';
+import 'motion.dart';
 import 'notifications.dart';
+import 'offline_banner.dart';
 import 'push.dart';
+import 'telemetry.dart';
 import 'theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -15,6 +22,9 @@ import 'screens/intro_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 日付・数の書式の既定を日本語にする（locale を渡さない DateFormat が英語で出ないように）。
+  Intl.defaultLocale = 'ja_JP';
+  await initializeDateFormatting('ja');
   final brightness =
       WidgetsBinding.instance.platformDispatcher.platformBrightness;
   SystemChrome.setSystemUIOverlayStyle(AppTheme.overlayFor(brightness));
@@ -28,6 +38,10 @@ Future<void> main() async {
     );
     _watchSignOut();
     await _setUpPush();
+    // Firebase の初期化（_setUpPush の中）のあとに。設定が無ければどちらも何もしない。
+    await Telemetry.init();
+    Telemetry.setUser(Supabase.instance.client.auth.currentUser?.id);
+    AppUpdate.start();
   }
 
   runApp(const RevPilotApp());
@@ -39,6 +53,9 @@ void _watchSignOut() {
     if (state.event == AuthChangeEvent.signedOut) {
       AppEvents.reset();
       NotifTap.clear();
+      Telemetry.setUser(null);
+    } else if (state.event == AuthChangeEvent.signedIn) {
+      Telemetry.setUser(state.session?.user.id);
     }
   });
 }
@@ -68,6 +85,9 @@ Future<void> _setUpPush() async {
   });
 }
 
+/// アップデートのお願いのシートを、どの画面の上にも出すための鍵。
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 class RevPilotApp extends StatelessWidget {
   const RevPilotApp({super.key});
 
@@ -76,9 +96,21 @@ class RevPilotApp extends StatelessWidget {
     return MaterialApp(
       title: 'RevPilot',
       debugShowCheckedModeBanner: false,
+      navigatorKey: rootNavigatorKey,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: ThemeMode.system,
+      // 日本語のみ。これが無いと、文字を選んだときのメニュー（Copy / Paste）・
+      // 戻るボタンの読み上げ（Back）・日付の選択などが英語で出ていた。
+      locale: const Locale('ja', 'JP'),
+      supportedLocales: const [Locale('ja', 'JP')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      builder: (context, child) => OfflineBanner(
+        child: AppUpdateGate(
+          navigatorKey: rootNavigatorKey,
+          child: child ?? const SizedBox.shrink(),
+        ),
+      ),
       home: AppConfig.isConfigured ? const AuthGate() : const _ConfigError(),
     );
   }
@@ -125,7 +157,7 @@ class _AuthGateState extends State<AuthGate> {
           child = const LoginScreen(key: ValueKey('login'));
         }
         return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
+          duration: motionDuration(context, const Duration(milliseconds: 350)),
           switchInCurve: Curves.easeOut,
           transitionBuilder: (child, anim) => FadeTransition(
             opacity: anim,

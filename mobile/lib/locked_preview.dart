@@ -2,13 +2,14 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:intl/intl.dart';
+import 'motion.dart';
 
 import 'data.dart';
 import 'models.dart';
 import 'screens/plan_screen.dart';
 import 'theme.dart';
 import 'widgets.dart';
+import 'format.dart';
 
 /// Free の閲覧範囲より前にある、保存済みレビューのチラ見せ。
 ///
@@ -79,7 +80,7 @@ class LockedReviewsTeaser extends StatelessWidget {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: _LockedCard(preview.samples[i]),
                   )
-                      .animate(delay: (80 * i).ms)
+                      .motion(context, delay: (80 * i).ms)
                       .fadeIn(duration: 260.ms),
               ],
             ),
@@ -117,7 +118,7 @@ class _LockedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final date = review.reviewedAt != null
-        ? DateFormat('yyyy/M/d').format(review.reviewedAt!.toLocal())
+        ? formatListDate(review.reviewedAt!)
         : '';
     // 抜粋が短いと1行で終わって「ぼかし」に見えないので、2行ぶんに伸ばす。
     final text = review.snippet.isEmpty

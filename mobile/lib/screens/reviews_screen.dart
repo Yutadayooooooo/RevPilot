@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:intl/intl.dart';
+import '../motion.dart';
 
 import '../app_events.dart';
 import '../data.dart';
@@ -18,6 +18,7 @@ import '../widgets.dart';
 import 'connect_store_screen.dart';
 import 'plan_screen.dart';
 import 'review_detail_screen.dart';
+import '../format.dart';
 
 class ReviewsScreen extends StatefulWidget {
   const ReviewsScreen({super.key});
@@ -416,7 +417,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
         final r = reviews[i];
         final delay = (i < 12 ? i * 45 : 0).ms;
         return _ReviewCard(r, onTap: () => _openDetail(r))
-            .animate(key: ValueKey('$_listGen-$i'))
+            .motion(context, key: ValueKey('$_listGen-$i'))
             .fadeIn(duration: 280.ms, delay: delay)
             .slideY(begin: 0.08, end: 0, curve: Curves.easeOutCubic);
       },
@@ -608,7 +609,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 200.ms);
+    ).motion(context).fadeIn(duration: 200.ms);
   }
 
   // ---- 取得エラーの警告 ----
@@ -677,7 +678,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 250.ms);
+    ).motion(context).fadeIn(duration: 250.ms);
   }
 
   // ---- お知らせバナー ----
@@ -731,7 +732,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
               ),
             ],
           ),
-        ).animate().fadeIn(duration: 250.ms);
+        ).motion(context).fadeIn(duration: 250.ms);
       }).toList(),
     );
   }
@@ -795,7 +796,7 @@ class _ReviewsScreenState extends State<ReviewsScreen> {
                 ),
         ),
       ),
-    ).animate().fadeIn(duration: 180.ms);
+    ).motion(context).fadeIn(duration: 180.ms);
   }
 
   // ---- 絞り込み / 並び替え バー ----
@@ -1499,7 +1500,7 @@ class _ReviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final date = review.reviewedAt != null
-        ? DateFormat('M/d').format(review.reviewedAt!)
+        ? formatListDate(review.reviewedAt!)
         : '';
     return Card(
       child: InkWell(

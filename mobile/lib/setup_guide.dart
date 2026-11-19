@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'motion.dart';
 
 import 'data.dart';
 import 'models.dart';
@@ -194,7 +195,7 @@ class _SetupGuideState extends State<SetupGuide> {
               padding: const EdgeInsets.only(bottom: 10),
               child: _StepCard(index: i + 1, step: steps[i]),
             )
-                .animate(delay: (70 * i).ms)
+                .motion(context, delay: (70 * i).ms)
                 .fadeIn(duration: 260.ms)
                 .slideY(begin: 0.06, end: 0, curve: Curves.easeOutCubic),
         ],
