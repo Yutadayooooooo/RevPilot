@@ -854,6 +854,8 @@ cd mobile && flutter build ios --release --dart-define-from-file=config/app_conf
 - 送るのはクラッシュの記録と、ログイン中の利用者の ID だけ（本文やメールアドレスは送らない）。
 - これに合わせて、App Store Connect の App のプライバシーの「クラッシュデータ」（用途: アプリの機能、紐づけ: はい、トラッキング: いいえ）は**実態どおりになる**。
   「パフォーマンスデータ」「その他の診断データ」「その他の使用状況データ」は引き続き収集していないので外す。
+- Android は Crashlytics の Gradle プラグインを使わない（google-services.json を置かない作りのため）。代わりに
+  `android/app/src/main/res/values/crashlytics.xml` でビルド ID を必須にしていない。Dart の例外の記録には影響しない。
 - iOS の dSYM（ネイティブのクラッシュの読み解きに使う）を自動で上げるには、Xcode の Runner の Build Phases に
   FlutterFire の `upload-symbols` を足す（Dart の例外は dSYM なしでも読める。後回しでよい）。
 

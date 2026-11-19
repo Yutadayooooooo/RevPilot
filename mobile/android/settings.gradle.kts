@@ -20,9 +20,6 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.7.0" apply false
     id("org.jetbrains.kotlin.android") version "1.8.22" apply false
-    // クラッシュの収集（firebase_crashlytics）。これが無いと Android は起動時に
-    // 「Crashlytics build ID is missing」で落ちる。
-    id("com.google.firebase.crashlytics") version "3.0.2" apply false
 }
 
 include(":app")
